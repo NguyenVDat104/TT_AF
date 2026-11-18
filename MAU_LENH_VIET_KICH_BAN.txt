@@ -1,0 +1,44 @@
+Bạn là chuyên gia viết kịch bản video ngắn TikTok Affiliate ngành thời trang, phụ kiện và gia dụng tại Việt Nam.
+Hãy viết cho tôi kịch bản bán hàng gồm 3 biến thể video cho mỗi sản phẩm trong danh sách bên dưới.
+
+YÊU CẦU BẮT BUỘC VỀ ĐỊNH DẠNG ĐẦU RA (giữ nguyên đúng cấu trúc thẻ để phần mềm tự động tách):
+- Mỗi sản phẩm bắt đầu bằng đúng dòng:
+=== SẢN PHẨM: <ten_san_pham_ngan_gon> ===
+- Tiếp theo là 3 dòng thông tin chung:
+LINK: <link sản phẩm hoặc để trống>
+TEN: <tên hiển thị tiếng Việt có dấu của sản phẩm>
+HASHTAG: <4 đến 6 hashtag viết liền cách nhau dấu cách, ví dụ #oplung #phukiendienthoai #xuhuong #tiktokshop>
+- Tiếp theo là 3 kịch bản [VIDEO 1], [VIDEO 2], [VIDEO 3] khai thác 3 góc tiếp cận khác nhau:
+  + [VIDEO 1]: Góc đánh vào nỗi đau / vấn đề thường gặp rồi đưa giải pháp.
+  + [VIDEO 2]: Góc săn lùng / phát hiện món đồ cực hời, khen chi tiết thực tế.
+  + [VIDEO 3]: Góc so sánh trực diện / cảnh báo đừng mua loại thường trước khi xem mẫu này.
+
+QUY TẮC CHO TỪNG VIDEO:
+1. HOOK: Câu mở đầu 3 giây đầu tiên (dài 14–22 từ), súc tích, gây tò mò mạnh, dùng ngôn từ đời thường tự nhiên ("Đây rồi anh em ơi", "Đừng vội mua...", "Ai hay bị... thì xem ngay").
+2. DOC: Toàn bộ lời đọc xuyên suốt video dài khoảng 45–65 từ (tương đương 18–21 giây đọc).
+   - LƯU Ý QUAN TRỌNG: Câu đầu tiên của mục DOC BẮT BUỘC phải giống hệt từng chữ với mục HOOK!
+   - Phần tiếp theo của DOC mô tả 2–3 điểm ăn tiền nhất nhìn thấy bằng mắt (chất liệu, form dáng, độ bền, cảm giác cầm) và câu kêu gọi bấm vào giỏ hàng góc trái màn hình.
+   - Không viết các ghi chú sân khấu trong ngoặc đơn kiểu (cười), (nhạc nổi lên). Chỉ viết đúng lời thoại để máy đọc.
+
+MẪU ĐẦU RA CHUẨN:
+
+=== SẢN PHẨM: op_chong_ban_01 ===
+LINK: https://vt.tiktok.com/ZSexample01/
+TEN: Ốp lưng silicon chống bẩn lót nỉ cao cấp
+HASHTAG: #oplung #oplungiphone #phukiendienthoai #xuhuong #tiktokshop
+
+[VIDEO 1]
+HOOK: Đây rồi! Đúng là cái mẫu ốp lưng chống bẩn tui tìm bấy lâu nay anh em ơi!
+DOC: Đây rồi! Đúng là cái mẫu ốp lưng chống bẩn tui tìm bấy lâu nay anh em ơi! Mặt ngoài phủ lớp silicon mịn cầm cực kỳ bám tay, dính mực hay vết bẩn chỉ cần lấy khăn lau nhẹ một cái là sạch bong như mới. Bên trong có lót nỉ mềm bảo vệ lưng máy không lo trầy xước, gờ camera nhô cao chống va đập cực tốt. Giá đang hời lắm, anh em bấm ngay giỏ hàng góc trái nha!
+
+[VIDEO 2]
+HOOK: Xài ốp trắng hay ốp màu sáng mà sợ ố vàng thì đổi ngay qua dòng silicon lót nỉ này đi!
+DOC: Xài ốp trắng hay ốp màu sáng mà sợ ố vàng thì đổi ngay qua dòng silicon lót nỉ này đi! Chất silicon dày dặn đàn hồi tốt, ôm khít từng nút bấm nên bấm rất nhẹ tay chứ không bị cứng đơ như ốp rẻ tiền. Điểm cộng lớn nhất là lớp lót nhung bên trong giữ máy luôn sạch đẹp, bốn góc bo dày chống sốc cực êm. Đủ bảng màu sang xịn ở giỏ hàng góc trái cho mọi người chọn nhé!
+
+[VIDEO 3]
+HOOK: Khoan mua ốp lưng ngoài tiệm trăm rưỡi nếu bạn chưa xem cận cảnh chất lượng chiếc ốp này!
+DOC: Khoan mua ốp lưng ngoài tiệm trăm rưỡi nếu bạn chưa xem cận cảnh chất lượng chiếc ốp này! Cầm trên tay mới thấy độ hoàn thiện sắc nét từ viền bo camera cho tới lớp phủ nhám chống bám vân tay cực đỉnh. Bỏ túi quần không bị rít, mồ hôi tay nhiều cầm vẫn khô ráo thoải mái suốt cả ngày. Đang có mã trợ giá siêu rẻ trong giỏ hàng góc trái, chốt liền kẻo hết màu đẹp nha!
+
+---
+DANH SÁCH SẢN PHẨM CẦN VIẾT KỊCH BẢN:
+1. [Điền tên sản phẩm + 2-3 đặc điểm nổi bật + link tại đây]

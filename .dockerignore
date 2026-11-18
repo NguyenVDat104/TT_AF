@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+_tam/
+san_pham/
+san_sang_dang/
+cai_dat.json
+*.pdf
+.git/

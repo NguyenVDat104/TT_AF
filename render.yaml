@@ -1,0 +1,19 @@
+# Render.com Blueprint — Tự động triển khai Xưởng Video TikTok Affiliate
+services:
+  - type: web
+    name: xuong-video-tiktok
+    runtime: docker
+    plan: free
+    region: singapore
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHONUTF8
+        value: "1"
+      - key: LOW_MEMORY_MODE
+        value: "1"
+      - key: DATA_DIR
+        value: "/app/data"
+      - key: APP_USER
+        value: "admin"
+      - key: APP_PASSWORD
+        sync: false

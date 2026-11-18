@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Xưởng Video TikTok Affiliate (Bản 1.3)</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <!-- Thanh Header & Chọn Hồ sơ Kênh -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-logo">🎬</div>
+      <div>
+        <h1>Xưởng Video TikTok Affiliate <span class="badge-ver">v1.3</span></h1>
+        <p class="subtitle">Tự động hóa sản xuất video 9:16 · Chống trùng lặp · Phụ đề động</p>
+      </div>
+    </div>
+
+    <div class="topbar-controls">
+      <div class="channel-box">
+        <label for="headerChannelSelect">Hồ sơ Kênh:</label>
+        <select id="headerChannelSelect" onchange="onSwitchChannelPreset(this.value)">
+          <option value="mac_dinh">Kênh Mặc định (Đỏ Đô)</option>
+        </select>
+      </div>
+
+      <div class="queue-pill" id="headerQueuePill">
+        <span class="dot idle" id="queueDot"></span>
+        <span id="headerQueueText">Hàng đợi: Rảnh (0 chờ)</span>
+        <button class="btn btn-xs btn-outline-light" id="btnToggleQueue" onclick="toggleQueuePause()">⏸ Tạm dừng</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Thanh 5 Tab -->
+  <nav class="tabs-nav">
+    <button class="tab-btn active" data-tab="tab-products" onclick="switchTab('tab-products')">
+      1. Sản phẩm <span class="tab-count" id="countProducts">0</span>
+    </button>
+    <button class="tab-btn" data-tab="tab-bulk" onclick="switchTab('tab-bulk')">
+      2. Dán kịch bản
+    </button>
+    <button class="tab-btn" data-tab="tab-review" onclick="switchTab('tab-review')">
+      3. Duyệt video <span class="tab-count highlight" id="countPendingReview">0</span>
+    </button>
+    <button class="tab-btn" data-tab="tab-ready" onclick="switchTab('tab-ready')">
+      4. Sẵn sàng đăng <span class="tab-count success" id="countReady">0</span>
+    </button>
+    <button class="tab-btn" data-tab="tab-settings" onclick="switchTab('tab-settings')">
+      ⚙ Cài đặt
+    </button>
+  </nav>
+
+  <!-- Vùng nội dung chính -->
+  <main class="main-container">
+    <div id="cloudNoticeBanner" class="warning-banner hidden">
+      ☁ <strong>Đang chạy trên Cloud (Render Free):</strong> Đã tự động bật chế độ tối ưu RAM (<code>&lt; 250 MB</code>). Lưu ý ổ cứng gói Free là tạm thời — sau khi bấm <strong>✓ Duyệt</strong>, bạn nhớ qua tab <strong>4. Sẵn sàng đăng</strong> bấm <strong>📦 Tải ZIP ngày</strong> về máy/điện thoại ngay để lưu trữ lâu dài!
+    </div>
+
+    <!-- TAB 1: SẢN PHẨM -->
+    <section id="tab-products" class="tab-panel active">
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <button class="btn btn-primary" onclick="openNewProductModal()">+ Sản phẩm mới</button>
+          <button class="btn btn-accent" onclick="renderAllPending()">▶ Làm tất cả video đủ tư liệu</button>
+          <button class="btn btn-secondary local-only-btn" onclick="openFolder('san_pham')">📂 Mở thư mục san_pham</button>
+        </div>
+        <div class="toolbar-right">
+          <input type="search" id="searchProductInput" class="input-search" placeholder="🔍 Tìm tên hoặc mã sản phẩm..." oninput="renderProductsList()" />
+          <button class="btn btn-ghost" onclick="refreshAll()">↻ Làm mới</button>
+        </div>
+      </div>
+
+      <div class="tip-banner">
+        💡 <strong>Mẹo nhanh:</strong> Bạn có thể <strong>kéo-thả thẳng 3 file bất kỳ</strong> (không cần đổi tên thành <code>anh_trai</code>, <code>anh_phai</code>, <code>can_canh</code>) vào thẻ sản phẩm — hệ thống tự nhận clip dài nhất làm cận cảnh và cho phép bấm <strong>⇄ Đổi chỗ</strong> chỉ với 1 cú nhấp!
+      </div>
+
+      <div id="productsList" class="products-list">
+        <!-- JS render -->
+      </div>
+    </section>
+
+    <!-- TAB 2: DÁN KỊCH BẢN HÀNG LOẠT -->
+    <section id="tab-bulk" class="tab-panel">
+      <div class="grid-2col">
+        <div class="card">
+          <div class="card-header">
+            <h3>Bước 1: Lệnh mẫu gửi Claude / ChatGPT</h3>
+            <button class="btn btn-primary btn-sm" onclick="copyPromptTemplate()">📋 Sao chép lệnh mẫu</button>
+          </div>
+          <p class="muted-text">Sao chép lệnh mẫu bên dưới, điền danh sách sản phẩm ở cuối rồi gửi cho Claude hoặc ChatGPT để tạo hàng loạt kịch bản chuẩn định dạng.</p>
+          <textarea id="promptTemplateBox" class="code-textarea" rows="16" readonly></textarea>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Bước 2: Dán kết quả kịch bản hàng loạt</h3>
+            <div class="btn-group">
+              <button class="btn btn-secondary btn-sm" onclick="previewBulkScripts()">🔍 Kiểm tra trước</button>
+              <button class="btn btn-primary btn-sm" onclick="saveBulkScripts()">💾 Tách & Lưu vào từng sản phẩm</button>
+            </div>
+          </div>
+          <p class="muted-text">Mỗi sản phẩm mở đầu bằng dòng <code>=== SẢN PHẨM: ten_san_pham ===</code>. Thư mục chưa có sẽ được tự động tạo.</p>
+          <textarea id="bulkPasteInput" class="code-textarea" rows="12" placeholder="=== SẢN PHẨM: op_chong_ban_01 ===&#10;LINK: https://...&#10;TEN: Ốp chống bẩn silicon&#10;HASHTAG: #oplung #xuhuong&#10;&#10;[VIDEO 1]&#10;HOOK: Đây rồi! ...&#10;DOC: Đây rồi! ..."></textarea>
+          <div id="bulkPreviewResult" class="bulk-preview-box"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: DUYỆT VIDEO -->
+    <section id="tab-review" class="tab-panel">
+      <div class="toolbar">
+        <div class="filter-pills" id="reviewFilterPills">
+          <button class="pill active" data-filter="cho_duyet" onclick="setReviewFilter('cho_duyet')">Chờ duyệt</button>
+          <button class="pill" data-filter="all" onclick="setReviewFilter('all')">Tất cả đã xuất</button>
+          <button class="pill" data-filter="da_duyet" onclick="setReviewFilter('da_duyet')">Đã duyệt</button>
+          <button class="pill" data-filter="da_loai" onclick="setReviewFilter('da_loai')">Đã loại</button>
+          <button class="pill" data-filter="loi" onclick="setReviewFilter('loi')">Bị lỗi</button>
+        </div>
+        <div class="shortcut-hint">
+          ⌨ Phím tắt khi bấm chọn thẻ video: <kbd>Space</kbd> Phát/Dừng · <kbd>A</kbd> Duyệt · <kbd>X</kbd> Loại · <kbd>R</kbd> Làm lại
+        </div>
+      </div>
+
+      <div id="reviewGrid" class="video-grid">
+        <!-- JS render -->
+      </div>
+    </section>
+
+    <!-- TAB 4: SẴN SÀNG ĐĂNG -->
+    <section id="tab-ready" class="tab-panel">
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <h3>Danh sách Video Đã Duyệt & Caption theo Ngày</h3>
+        </div>
+        <div class="toolbar-right">
+          <a class="btn btn-primary" href="/api/download/day_zip" target="_blank">📦 Tải ZIP tất cả ngày</a>
+          <button class="btn btn-secondary local-only-btn" onclick="openFolder('san_sang_dang')">📂 Mở thư mục san_sang_dang</button>
+          <button class="btn btn-ghost" onclick="loadReadyVideos()">↻ Làm mới</button>
+        </div>
+      </div>
+
+      <div class="warning-banner">
+        🛡 <strong>Nguyên tắc đăng kênh an toàn:</strong> Đăng thủ công trên TikTok, bật nút <strong>"Nội dung do AI tạo" (AI-generated content)</strong> nếu dùng giọng AI, và <strong>không đăng liền 3 video của cùng 1 sản phẩm</strong> (hãy rải theo khung giờ Sáng / Trưa / Tối được gợi ý bên dưới).
+      </div>
+
+      <div id="readyDaysContainer">
+        <!-- JS render -->
+      </div>
+    </section>
+
+    <!-- TAB 5: CÀI ĐẶT -->
+    <section id="tab-settings" class="tab-panel">
+      <div class="settings-grid">
+        <!-- Cột 1: Giọng đọc TTS -->
+        <div class="card">
+          <div class="card-header">
+            <h3>🔊 1. Cấu hình Giọng đọc Đa nguồn (TTS)</h3>
+            <label class="switch-label">
+              <input type="checkbox" id="cfg_voice_enabled" checked />
+              <span>Bật giọng đọc</span>
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label>Nguồn tạo giọng chính:</label>
+            <select id="cfg_tts_provider" onchange="onChangeTTSProviderUI()">
+              <option value="edge">Edge-TTS (Miễn phí, ~2 giây/video, không tốn VRAM - Khuyên dùng)</option>
+              <option value="cloud">Cloud TTS API (Gemini 2.5 TTS / OpenAI)</option>
+              <option value="voicestudio">VoiceStudio Local (VoxCPM2 tại localhost:3900 - Cần GPU mạnh)</option>
+            </select>
+          </div>
+
+          <!-- Nhóm Edge-TTS -->
+          <div id="ttsGroupEdge" class="tts-subbox">
+            <div class="form-group">
+              <label>Giọng đọc Tiếng Việt (Edge-TTS):</label>
+              <select id="cfg_edge_voice">
+                <option value="vi-VN-NamMinhNeural">vi-VN-NamMinhNeural (Nam trẻ trung, bán hàng năng lượng)</option>
+                <option value="vi-VN-HoaiMyNeural">vi-VN-HoaiMyNeural (Nữ tự nhiên, thời trang & phụ kiện)</option>
+              </select>
+            </div>
+            <div class="form-row-2">
+              <div class="form-group">
+                <label>Tốc độ đọc phần thân (ví dụ +6%):</label>
+                <input type="text" id="cfg_edge_rate" value="+6%" />
+              </div>
+              <div class="form-group">
+                <label>Cao độ phần thân (ví dụ +0Hz):</label>
+                <input type="text" id="cfg_edge_pitch" value="+0Hz" />
+              </div>
+            </div>
+            <div class="form-group checkbox-row">
+              <label>
+                <input type="checkbox" id="cfg_hook_boost_enabled" checked />
+                <strong>Nhấn giọng câu Hook mở đầu</strong> (đọc nhanh & hào hứng hơn ở 3 giây đầu)
+              </label>
+            </div>
+            <div class="form-row-2">
+              <div class="form-group">
+                <label>Tốc độ câu Hook:</label>
+                <input type="text" id="cfg_hook_boost_rate" value="+12%" />
+              </div>
+              <div class="form-group">
+                <label>Cao độ câu Hook:</label>
+                <input type="text" id="cfg_hook_boost_pitch" value="+2Hz" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Nhóm Cloud TTS -->
+          <div id="ttsGroupCloud" class="tts-subbox hidden">
+            <div class="form-row-2">
+              <div class="form-group">
+                <label>Nhà cung cấp Cloud:</label>
+                <select id="cfg_cloud_tts_provider">
+                  <option value="gemini">Google Gemini TTS API</option>
+                  <option value="openai">OpenAI-compatible (/v1/audio/speech)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Tên giọng (Kore, Puck, alloy...):</label>
+                <input type="text" id="cfg_cloud_tts_voice" value="Kore" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label>API Key:</label>
+              <input type="password" id="cfg_cloud_tts_api_key" placeholder="Nhập API Key..." />
+            </div>
+            <div class="form-row-2">
+              <div class="form-group">
+                <label>Model:</label>
+                <input type="text" id="cfg_cloud_tts_model" value="gemini-2.5-flash-preview-tts" />
+              </div>
+              <div class="form-group">
+                <label>Base URL (để trống nếu mặc định):</label>
+                <input type="text" id="cfg_cloud_tts_base_url" placeholder="https://api.openai.com/v1" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Nhóm VoiceStudio -->
+          <div id="ttsGroupVoiceStudio" class="tts-subbox hidden">
+            <div class="form-row-2">
+              <div class="form-group">
+                <label>Địa chỉ VoiceStudio:</label>
+                <input type="text" id="cfg_voicestudio_url" value="http://localhost:3900" />
+              </div>
+              <div class="form-group">
+                <label>Engine / Seed:</label>
+                <div class="inline-inputs">
+                  <input type="text" id="cfg_voice_engine" value="voxcpm2" />
+                  <input type="number" id="cfg_voice_seed" value="1234" />
+                </div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Profile ID đã lưu (để trống nếu dùng mô tả giọng):</label>
+              <div class="inline-inputs">
+                <input type="text" id="cfg_voice_profile_id" placeholder="Trống = dùng mô tả bên dưới" />
+                <button class="btn btn-secondary btn-sm" onclick="fetchVoiceStudioProfiles()">Lấy danh sách</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Mô tả giọng (Instruct):</label>
+              <input type="text" id="cfg_voice_instruct" value="A young Vietnamese man, energetic and excited, friendly social media sales voice" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Khoảng nghỉ giữa các câu (giây):</label>
+            <input type="number" step="0.05" id="cfg_voice_gap_seconds" value="0.15" />
+          </div>
+
+          <div class="voice-test-box">
+            <div class="inline-inputs">
+              <input type="text" id="voiceTestInput" value="Đây rồi! Đúng là cái mẫu ốp lưng chống bẩn tui đang tìm bấy lâu nay anh em ơi!" />
+              <button class="btn btn-secondary btn-sm" onclick="checkTTSConnection()">Kiểm tra</button>
+              <button class="btn btn-primary btn-sm" onclick="testVoicePreview()">🔊 Nghe thử</button>
+            </div>
+            <div id="voiceCheckStatus" class="muted-text mt-6"></div>
+            <audio id="voicePreviewAudio" controls class="audio-player hidden"></audio>
+          </div>
+        </div>
+
+        <!-- Cột 2: Chống trùng lặp, Phụ đề động & Khuôn Video -->
+        <div class="card">
+          <div class="card-header">
+            <h3>🎨 2. Chống Trùng lặp, Phụ đề Động & Khuôn Video</h3>
+          </div>
+
+          <div class="settings-section-title">Chống quét trùng lặp TikTok (Biến thiên v1, v2, v3)</div>
+          <div class="form-group checkbox-row">
+            <label>
+              <input type="checkbox" id="cfg_anti_duplicate_enabled" checked />
+              <strong>Tự động biến thiên 3 video</strong> (khác bố cục, màu sắc, nhịp cắt & xóa sạch metadata)
+            </label>
+          </div>
+          <div class="form-row-2">
+            <label class="checkbox-inline">
+              <input type="checkbox" id="cfg_auto_swap_slots_v2" checked /> Đảo ô Trái ↔ Phải ở Video 2
+            </label>
+            <label class="checkbox-inline">
+              <input type="checkbox" id="cfg_auto_vary_band_color" checked /> Đổi tông màu dải chữ v1/v2/v3
+            </label>
+          </div>
+
+          <div class="form-row-3 mt-8">
+            <div class="form-group">
+              <label>Màu dải chữ v1:</label>
+              <input type="color" id="cfg_band_color" value="#7A1016" class="color-picker" />
+            </div>
+            <div class="form-group">
+              <label>Màu dải chữ v2:</label>
+              <input type="color" id="cfg_band_color_v2" value="#5C0B10" class="color-picker" />
+            </div>
+            <div class="form-group">
+              <label>Màu dải chữ v3:</label>
+              <input type="color" id="cfg_band_color_v3" value="#1E2229" class="color-picker" />
+            </div>
+          </div>
+
+          <hr class="divider" />
+
+          <div class="settings-section-title">Phụ đề động kiểu CapCut ở nửa sau (.ass)</div>
+          <div class="form-group checkbox-row">
+            <label>
+              <input type="checkbox" id="cfg_subtitle_enabled" checked />
+              <strong>Hiện phụ đề nhảy theo giọng đọc ở đoạn cận cảnh</strong>
+            </label>
+          </div>
+          <div class="form-row-3">
+            <div class="form-group">
+              <label>Số từ / cụm:</label>
+              <input type="number" id="cfg_subtitle_words_per_chunk" min="2" max="7" value="4" />
+            </div>
+            <div class="form-group">
+              <label>Cỡ chữ phụ đề:</label>
+              <input type="number" id="cfg_subtitle_font_size" min="36" max="74" value="52" />
+            </div>
+            <div class="form-group">
+              <label>Màu phụ đề:</label>
+              <input type="color" id="cfg_subtitle_color" value="#FFE600" class="color-picker" />
+            </div>
+          </div>
+
+          <hr class="divider" />
+
+          <div class="settings-section-title">Khuôn Banner, Mã hóa & Âm thanh</div>
+          <div class="form-row-3">
+            <div class="form-group">
+              <label>Cỡ chữ Hook:</label>
+              <input type="number" id="cfg_hook_font_size" value="60" min="40" max="84" />
+            </div>
+            <div class="form-group">
+              <label>Làm nét (unsharp):</label>
+              <input type="number" step="0.1" id="cfg_sharpen" value="0.5" min="0" max="2" />
+            </div>
+            <div class="form-group">
+              <label>Chất lượng CRF:</label>
+              <input type="number" id="cfg_crf" value="20" min="16" max="28" />
+            </div>
+          </div>
+
+          <div class="form-row-2">
+            <label class="checkbox-inline">
+              <input type="checkbox" id="cfg_hook_uppercase" checked /> Chữ Hook IN HOA
+            </label>
+            <label class="checkbox-inline">
+              <input type="checkbox" id="cfg_banner_zoom" checked /> Zoom chậm 4% vùng ảnh Banner
+            </label>
+          </div>
+
+          <div class="form-row-2 mt-8">
+            <div class="form-group">
+              <label>Bộ mã hóa Video:</label>
+              <select id="cfg_video_encoder">
+                <option value="libx264">CPU libx264 veryfast (Tương thích mọi máy, chuẩn cho MX550)</option>
+                <option value="h264_nvenc">GPU NVIDIA NVENC (Chỉ bật trên máy card RTX/GTX)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Độ dài tối thiểu (giây):</label>
+              <input type="number" step="0.5" id="cfg_min_seconds" value="18" />
+            </div>
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label>Đường dẫn Font .ttf riêng (tùy chọn):</label>
+              <input type="text" id="cfg_font_path" placeholder="Trống = Arial Bold hệ thống" />
+            </div>
+            <div class="form-group">
+              <label>Đường dẫn Nhạc nền .mp3 (âm lượng 12%):</label>
+              <input type="text" id="cfg_music_path" placeholder="Khuyên thêm nhạc trên TikTok để tránh bản quyền" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Hashtag mặc định của kênh:</label>
+            <input type="text" id="cfg_default_hashtags" value="#xuhuong #fyp #tiktokshop" />
+          </div>
+
+          <div class="form-actions">
+            <button class="btn btn-primary" onclick="saveSettingsForm()">💾 Lưu toàn bộ cài đặt</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- MODAL 1: TRÌNH CHỈNH KHUNG ẢNH / CLIP -->
+  <div id="cropModal" class="modal-backdrop hidden">
+    <div class="modal-dialog modal-xl">
+      <div class="modal-header">
+        <div>
+          <h3>✂ Chỉnh Khung Tư liệu: <span id="cropModalProductTitle"></span></h3>
+          <p class="muted-text">Kéo chuột trên ảnh để dời tâm <code>(cx, cy)</code> · Lăn chuột hoặc kéo thanh trượt để phóng to/thu nhỏ <code>(z)</code></p>
+        </div>
+        <button class="btn-close" onclick="closeCropModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="crop-slots-row">
+          <!-- 3 ô sẽ được JS dựng: anh_trai (169x400), anh_phai (169x400), can_canh (225x400) -->
+          <div class="crop-slot-card" data-slot="anh_trai">
+            <div class="crop-slot-title">
+              <span>1. Ô Banner Trái (540 × 1280)</span>
+              <button class="btn btn-xs btn-ghost" onclick="resetSingleSlotAuto('anh_trai')">↺ Tự động</button>
+            </div>
+            <div class="crop-viewport vp-half" id="vp_anh_trai">
+              <img class="crop-bg-blur" id="bg_anh_trai" alt="" />
+              <img class="crop-fg-img" id="fg_anh_trai" alt="" draggable="false" />
+            </div>
+            <div class="crop-controls">
+              <label>Zoom <span id="zval_anh_trai">1.00</span>×</label>
+              <input type="range" min="0.40" max="3.00" step="0.02" value="1.00" id="zslider_anh_trai" oninput="onCropSliderChange('anh_trai', this.value)" />
+              <label class="video-mode-toggle hidden" id="vtoggle_wrap_anh_trai">
+                <input type="checkbox" id="vtoggle_anh_trai" checked /> 🎬 Chạy clip chuyển động thật
+              </label>
+            </div>
+          </div>
+
+          <div class="crop-slot-card" data-slot="anh_phai">
+            <div class="crop-slot-title">
+              <span>2. Ô Banner Phải (540 × 1280)</span>
+              <button class="btn btn-xs btn-ghost" onclick="resetSingleSlotAuto('anh_phai')">↺ Tự động</button>
+            </div>
+            <div class="crop-viewport vp-half" id="vp_anh_phai">
+              <img class="crop-bg-blur" id="bg_anh_phai" alt="" />
+              <img class="crop-fg-img" id="fg_anh_phai" alt="" draggable="false" />
+            </div>
+            <div class="crop-controls">
+              <label>Zoom <span id="zval_anh_phai">1.00</span>×</label>
+              <input type="range" min="0.40" max="3.00" step="0.02" value="1.00" id="zslider_anh_phai" oninput="onCropSliderChange('anh_phai', this.value)" />
+              <label class="video-mode-toggle hidden" id="vtoggle_wrap_anh_phai">
+                <input type="checkbox" id="vtoggle_anh_phai" checked /> 🎬 Chạy clip chuyển động thật
+              </label>
+            </div>
+          </div>
+
+          <div class="crop-slot-card" data-slot="can_canh">
+            <div class="crop-slot-title">
+              <span>3. Nửa sau Cận cảnh (1080 × 1920)</span>
+              <button class="btn btn-xs btn-ghost" onclick="resetSingleSlotAuto('can_canh')">↺ Tự động</button>
+            </div>
+            <div class="crop-viewport vp-full" id="vp_can_canh">
+              <img class="crop-bg-blur" id="bg_can_canh" alt="" />
+              <img class="crop-fg-img" id="fg_can_canh" alt="" draggable="false" />
+            </div>
+            <div class="crop-controls">
+              <label>Zoom <span id="zval_can_canh">1.00</span>×</label>
+              <input type="range" min="0.40" max="3.00" step="0.02" value="1.00" id="zslider_can_canh" oninput="onCropSliderChange('can_canh', this.value)" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="resetAllFramesAuto()">↺ Đặt lại Tự động cả 3 ô</button>
+        <div class="btn-group">
+          <button class="btn btn-ghost" onclick="closeCropModal()">Đóng</button>
+          <button class="btn btn-primary" onclick="saveFramesAndPreviewBanner()">💾 Lưu & Xem Banner</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: XEM TRƯỚC BANNER (v1 / v2 / v3) -->
+  <div id="bannerPreviewModal" class="modal-backdrop hidden">
+    <div class="modal-dialog modal-md">
+      <div class="modal-header">
+        <h3>👁 Xem trước Banner: <span id="bannerModalTitle"></span></h3>
+        <button class="btn-close" onclick="closeBannerModal()">✕</button>
+      </div>
+      <div class="modal-body center-col">
+        <div class="pill-group mb-10">
+          <button class="pill active" id="btnPrevV1" onclick="switchBannerVariantPreview(1)">Biến thể Video 1</button>
+          <button class="pill" id="btnPrevV2" onclick="switchBannerVariantPreview(2)">Biến thể Video 2 (Đảo ô/Màu)</button>
+          <button class="pill" id="btnPrevV3" onclick="switchBannerVariantPreview(3)">Biến thể Video 3</button>
+        </div>
+        <img id="bannerPreviewImage" class="banner-preview-img" alt="Banner Preview" />
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: SỬA NỘI DUNG KỊCH BẢN (noi_dung.txt) -->
+  <div id="contentModal" class="modal-backdrop hidden">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <h3>📝 Sửa kịch bản: <span id="contentModalTitle"></span></h3>
+        <button class="btn-close" onclick="closeContentModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <textarea id="contentModalTextarea" class="code-textarea" rows="18"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeContentModal()">Hủy</button>
+        <button class="btn btn-primary" onclick="saveProductContentModal()">💾 Lưu noi_dung.txt</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 4: TẠO SẢN PHẨM MỚI -->
+  <div id="newProductModal" class="modal-backdrop hidden">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-header">
+        <h3>+ Tạo Sản phẩm mới</h3>
+        <button class="btn-close" onclick="closeNewProductModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Tên sản phẩm (tự tạo thư mục không dấu):</label>
+          <input type="text" id="newProdName" placeholder="Ví dụ: Túi đeo chéo da mềm 01" />
+        </div>
+        <div class="form-group">
+          <label>Link sản phẩm Affiliate (tùy chọn):</label>
+          <input type="text" id="newProdLink" placeholder="https://vt.tiktok.com/..." />
+        </div>
+        <div class="form-group">
+          <label>Hashtag riêng (để trống dùng mặc định):</label>
+          <input type="text" id="newProdHashtag" placeholder="#tuixach #thoitrang #tiktokshop" />
+        </div>
+        <label class="checkbox-inline mt-8">
+          <input type="checkbox" id="newProdOpenExplorer" /> Mở ngay thư mục trong Windows Explorer
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeNewProductModal()">Hủy</button>
+        <button class="btn btn-primary" onclick="submitNewProduct()">Tạo sản phẩm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ô NHẬT KÝ CỐ ĐỊNH Ở CUỐI TRANG -->
+  <footer class="log-dock" id="logDock">
+    <div class="log-dock-header" onclick="toggleLogDockSize()">
+      <div class="log-status-left">
+        <span class="log-title">🖥 Nhật ký Xưởng Video</span>
+        <span id="logCurrentJobBadge" class="job-badge">Đang rảnh</span>
+      </div>
+      <div class="log-actions" onclick="event.stopPropagation()">
+        <button class="btn btn-xs btn-dark" onclick="clearPendingQueue()">🗑 Xóa hàng chờ</button>
+        <button class="btn btn-xs btn-dark" onclick="toggleLogDockSize()" id="btnExpandLog">▲ Thu/Phóng</button>
+      </div>
+    </div>
+    <pre id="logConsoleOutput" class="log-console">Đang kết nối máy chủ...</pre>
+  </footer>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
