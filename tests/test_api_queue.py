@@ -30,11 +30,24 @@ def test_api_end_to_end_flow(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(config, "CONFIG_PATH", cfg_path)
     monkeypatch.setattr(main, "BASE_DIR", tmp_path)
     monkeypatch.setattr(queue_worker, "QUEUE_PERSIST_PATH", tam_dir / "_hang_doi.json")
+    monkeypatch.setenv("APP_USER", "admin")
+    monkeypatch.setenv("APP_PASSWORD", "123456")
 
     with TestClient(main.app) as client:
-        # 1. Trang chủ
+        # 0. Chưa đăng nhập -> GET / chuyển hướng về /login (302)
+        r_unauth = client.get("/", follow_redirects=False)
+        assert r_unauth.status_code == 302
+        assert r_unauth.headers["location"] == "/login"
+
+        # Đăng nhập qua API Cookie phiên
+        r_login = client.post("/api/auth/login", json={"username": "admin", "password": "123456"})
+        assert r_login.status_code == 200
+        assert "tt_af_session" in client.cookies
+
+        # 1. Trang chủ sau khi đăng nhập
         r_home = client.get("/")
         assert r_home.status_code == 200
+        assert "sidebar" in r_home.text
 
         # 2. Dán kịch bản hàng loạt
         bulk_txt = """

@@ -28,8 +28,35 @@ const VIEWPORT_SPECS = {
   can_canh: { slotW: 1080, slotH: 1920, vpW: 225, vpH: 400 },
 };
 
+const TAB_META = {
+  "tab-products": {
+    title: "Sản phẩm & Tư liệu đầu vào",
+    subtitle: "Kéo-thả 3 file ảnh/clip vào từng sản phẩm, kiểm tra khung và bấm Làm video",
+  },
+  "tab-bulk": {
+    title: "Dán Kịch bản AI Hàng loạt",
+    subtitle: "Sao chép lệnh mẫu gửi Claude / ChatGPT rồi dán kết quả để tự tạo nhiều sản phẩm cùng lúc",
+  },
+  "tab-review": {
+    title: "Duyệt Video Thành phẩm",
+    subtitle: "Xem trước video 9:16 đã ghép giọng & phụ đề động, bấm Duyệt để xuất sang kho đăng",
+  },
+  "tab-ready": {
+    title: "Kho Video Sẵn sàng Đăng",
+    subtitle: "Tải trọn bộ file ZIP (MP4 + Caption) về máy tính hoặc điện thoại để đăng lên kênh TikTok",
+  },
+  "tab-settings": {
+    title: "Cài đặt Hệ thống & Khuôn Video",
+    subtitle: "Tùy chỉnh giọng đọc AI, màu sắc thương hiệu kênh, chống trùng lặp và phụ đề động",
+  },
+};
+
 async function apiFetch(url, options = {}) {
   const resp = await fetch(url, options);
+  if (resp.status === 401) {
+    window.location.href = "/login";
+    throw new Error("Phiên đăng nhập đã hết hạn.");
+  }
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) {
     throw new Error(data.error || `Lỗi máy chủ (${resp.status})`);
@@ -54,7 +81,7 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
-/* ==================== CHUYỂN TAB ==================== */
+/* ==================== CHUYỂN TAB & SIDEBAR ==================== */
 function switchTab(tabId) {
   document.querySelectorAll(".tab-btn").forEach((b) => {
     b.classList.toggle("active", b.dataset.tab === tabId);
@@ -62,8 +89,83 @@ function switchTab(tabId) {
   document.querySelectorAll(".tab-panel").forEach((p) => {
     p.classList.toggle("active", p.id === tabId);
   });
+  const meta = TAB_META[tabId];
+  if (meta) {
+    document.getElementById("pageHeaderTitle").textContent = meta.title;
+    document.getElementById("pageHeaderSubtitle").textContent = meta.subtitle;
+  }
+  toggleMobileSidebar(false);
   if (tabId === "tab-review") renderReviewGrid();
   if (tabId === "tab-ready") loadReadyVideos();
+}
+
+function toggleMobileSidebar(open) {
+  const sb = document.getElementById("appSidebar");
+  const bd = document.getElementById("sidebarBackdrop");
+  if (!sb || !bd) return;
+  sb.classList.toggle("open", Boolean(open));
+  bd.classList.toggle("hidden", !open);
+}
+
+/* ==================== TÀI KHOẢN: LOGIN / LOGOUT / ĐỔI MẬT KHẨU ==================== */
+async function loadCurrentUser() {
+  try {
+    const me = await apiFetch("/api/auth/me");
+    const uname = me.username || "admin";
+    document.getElementById("currentUsernameDisplay").textContent = uname;
+    document.getElementById("userAvatarLetter").textContent = uname.charAt(0).toUpperCase();
+    document.getElementById("accNewUsername").value = uname;
+  } catch (_) {}
+}
+
+async function logoutAccount() {
+  try {
+    await fetch("/api/auth/logout", { method: "POST" });
+  } catch (_) {}
+  window.location.href = "/login";
+}
+
+function openAccountModal() {
+  document.getElementById("accCurrentPassword").value = "";
+  document.getElementById("accNewPassword").value = "";
+  document.getElementById("accConfirmPassword").value = "";
+  document.getElementById("accountModal").classList.remove("hidden");
+  toggleMobileSidebar(false);
+}
+
+function closeAccountModal() {
+  document.getElementById("accountModal").classList.add("hidden");
+}
+
+async function submitChangePassword() {
+  const newUsername = document.getElementById("accNewUsername").value.trim();
+  const curPass = document.getElementById("accCurrentPassword").value;
+  const newPass = document.getElementById("accNewPassword").value;
+  const confirmPass = document.getElementById("accConfirmPassword").value;
+
+  if (!curPass || !newPass) {
+    return showToast("Vui lòng nhập mật khẩu hiện tại và mật khẩu mới.", "error");
+  }
+  if (newPass !== confirmPass) {
+    return showToast("Mật khẩu mới nhập lại không khớp.", "error");
+  }
+
+  try {
+    const res = await apiFetch("/api/auth/change_password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        current_password: curPass,
+        new_username: newUsername,
+        new_password: newPass,
+      }),
+    });
+    closeAccountModal();
+    showToast(`Đã cập nhật tài khoản "${res.username}" thành công!`, "success");
+    await loadCurrentUser();
+  } catch (err) {
+    showToast(err.message, "error");
+  }
 }
 
 /* ==================== TẢI DỮ LIỆU ĐỊNH KỲ ==================== */
@@ -1245,6 +1347,6 @@ function toggleLogDockSize() {
 
 /* ==================== KHỞI ĐỘNG ==================== */
 document.addEventListener("DOMContentLoaded", async () => {
-  await Promise.all([loadConfigIntoUI(), loadPromptTemplate(), refreshAll()]);
+  await Promise.all([loadCurrentUser(), loadConfigIntoUI(), loadPromptTemplate(), refreshAll()]);
   setInterval(loadStatus, 3000);
 });

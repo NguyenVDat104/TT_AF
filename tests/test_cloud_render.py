@@ -40,9 +40,35 @@ def test_basic_auth_and_healthz_and_zip_download(tmp_path: Path, monkeypatch):
         r_unauth = client.get("/api/products")
         assert r_unauth.status_code == 401
 
-        # 3. Truy cập đúng mật khẩu Basic Auth -> 200 OK
-        auth = ("admin", "MatKhau@Render2026")
-        r_ok = client.get("/api/products", auth=auth)
+        # 3. Đăng nhập qua Cookie phiên (/api/auth/login) + kiểm tra /api/auth/me & Logout
+        r_bad_login = client.post("/api/auth/login", json={"username": "admin", "password": "sai"})
+        assert r_bad_login.status_code == 401
+
+        r_good_login = client.post("/api/auth/login", json={"username": "admin", "password": "MatKhau@Render2026"})
+        assert r_good_login.status_code == 200
+        assert client.get("/api/auth/me").json()["username"] == "admin"
+
+        # Kiểm tra Đổi mật khẩu
+        r_chg = client.post(
+            "/api/auth/change_password",
+            json={
+                "current_password": "MatKhau@Render2026",
+                "new_username": "dat_admin",
+                "new_password": "NewPass@999",
+            },
+        )
+        assert r_chg.status_code == 200
+        assert client.get("/api/auth/me").json()["username"] == "dat_admin"
+
+        # Kiểm tra Đăng xuất -> mất quyền truy cập ngay lập tức
+        client.post("/api/auth/logout")
+        assert client.get("/api/products").status_code == 401
+
+        # Đăng nhập lại bằng tài khoản mới
+        r_relogin = client.post("/api/auth/login", json={"username": "dat_admin", "password": "NewPass@999"})
+        assert r_relogin.status_code == 200
+        auth = None
+        r_ok = client.get("/api/products")
         assert r_ok.status_code == 200
 
         # 4. Tạo sản phẩm, giả lập duyệt video & tải trọn bộ ZIP ngày

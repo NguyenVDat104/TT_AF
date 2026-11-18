@@ -103,3 +103,16 @@ class OpenFolderRequest(BaseModel):
     target: str = "san_pham"
     product: Optional[str] = None
     date_folder: Optional[str] = None
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+    remember: bool = True
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_username: str
+    new_password: str
+

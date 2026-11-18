@@ -17,10 +17,18 @@ from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
+from app import auth as auth_mod
 from app import config as cfg_mod
 from app.config import (
     PROMPT_TEMPLATE_PATH,
@@ -51,6 +59,8 @@ from app.crop import (
 from app.models import (
     AssignFileSlotRequest,
     BulkScriptRequest,
+    ChangePasswordRequest,
+    LoginRequest,
     NewProductRequest,
     OpenFolderRequest,
     QueueControlRequest,
@@ -93,35 +103,44 @@ app = FastAPI(
 )
 
 
+PUBLIC_PATHS = {
+    "/healthz",
+    "/login",
+    "/logout",
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/auth/info",
+}
+
+
 @app.middleware("http")
-async def basic_auth_middleware(request: Request, call_next):
-    """Bảo vệ bằng mật khẩu (HTTP Basic Auth) khi đặt biến môi trường APP_PASSWORD trên Render."""
-    app_password = os.environ.get("APP_PASSWORD", "").strip()
-    if not app_password or request.url.path == "/healthz":
+async def session_auth_middleware(request: Request, call_next):
+    """Bảo vệ ứng dụng bằng phiên đăng nhập Cookie (kèm hỗ trợ Basic Auth cho API/Test)."""
+    path = request.url.path
+    if path in PUBLIC_PATHS or path.startswith("/static/"):
         return await call_next(request)
 
-    expected_user = os.environ.get("APP_USER", "").strip()
-    auth_header = request.headers.get("Authorization", "")
-    authorized = False
+    if not auth_mod.is_auth_enabled():
+        request.state.user = "admin"
+        return await call_next(request)
 
-    if auth_header.startswith("Basic "):
-        try:
-            decoded = base64.b64decode(auth_header[6:].strip()).decode("utf-8")
-            username, password = decoded.split(":", 1)
-            pass_ok = secrets.compare_digest(password, app_password)
-            user_ok = True if not expected_user else secrets.compare_digest(username, expected_user)
-            authorized = pass_ok and user_ok
-        except Exception:
-            authorized = False
+    cookie_token = request.cookies.get(auth_mod.SESSION_COOKIE_NAME)
+    auth_header = request.headers.get("Authorization")
+    user = auth_mod.get_authenticated_user_from_headers_or_cookies(cookie_token, auth_header)
 
-    if not authorized:
-        return Response(
-            content="Vui lòng đăng nhập mật khẩu quản trị Xưởng Video TikTok.",
-            status_code=401,
-            headers={"WWW-Authenticate": 'Basic realm="Xuong Video TikTok"'},
-        )
+    if user:
+        request.state.user = user
+        return await call_next(request)
 
-    return await call_next(request)
+    # Nếu truy cập trang giao diện chính bằng trình duyệt -> chuyển hướng mượt về trang /login
+    accept_hdr = request.headers.get("accept", "")
+    if path == "/" or ("text/html" in accept_hdr and not path.startswith("/api/")):
+        return RedirectResponse(url="/login", status_code=302)
+
+    return JSONResponse(
+        status_code=401,
+        content={"error": "Phiên đăng nhập đã hết hạn hoặc chưa đăng nhập.", "unauthorized": True},
+    )
 
 
 @app.exception_handler(HTTPException)
@@ -281,6 +300,97 @@ def _build_product_summary(prod_dir: Path) -> Dict[str, Any]:
         "has_manual_frames": (prod_dir / "khung.json").exists(),
         "videos": videos_list,
     }
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    cookie_token = request.cookies.get(auth_mod.SESSION_COOKIE_NAME)
+    if auth_mod.verify_session_token(cookie_token):
+        return RedirectResponse(url="/", status_code=302)
+    login_html = STATIC_DIR / "login.html"
+    if not login_html.exists():
+        return HTMLResponse("<h1>Trang đăng nhập đang khởi tạo...</h1>")
+    return HTMLResponse(login_html.read_text(encoding="utf-8"))
+
+
+@app.get("/logout")
+async def logout_redirect():
+    resp = RedirectResponse(url="/login", status_code=302)
+    resp.delete_cookie(auth_mod.SESSION_COOKIE_NAME, path="/")
+    return resp
+
+
+@app.get("/api/auth/info")
+async def api_auth_info():
+    username, _, _ = auth_mod.get_active_account_info()
+    return {
+        "default_username": username,
+        "show_local_hint": auth_mod.is_using_default_local_password(),
+        "is_cloud": cfg_mod.IS_CLOUD,
+    }
+
+
+@app.post("/api/auth/login")
+async def api_auth_login(req: LoginRequest):
+    if not auth_mod.verify_credentials(req.username, req.password):
+        raise HTTPException(status_code=401, detail="Tên đăng nhập hoặc mật khẩu không chính xác.")
+
+    active_user, _, _ = auth_mod.get_active_account_info()
+    max_age = auth_mod.SESSION_MAX_AGE_REMEMBER if req.remember else auth_mod.SESSION_MAX_AGE_DEFAULT
+    token = auth_mod.create_session_token(active_user, max_age=max_age)
+
+    resp = JSONResponse({"ok": True, "username": active_user})
+    resp.set_cookie(
+        key=auth_mod.SESSION_COOKIE_NAME,
+        value=token,
+        max_age=max_age,
+        httponly=True,
+        samesite="lax",
+        path="/",
+    )
+    queue_manager.log(f"🔐 Tài khoản '{active_user}' đã đăng nhập.")
+    return resp
+
+
+@app.post("/api/auth/logout")
+async def api_auth_logout():
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(auth_mod.SESSION_COOKIE_NAME, path="/")
+    return resp
+
+
+@app.get("/api/auth/me")
+async def api_auth_me(request: Request):
+    user = getattr(request.state, "user", None)
+    if not user:
+        active_user, _, _ = auth_mod.get_active_account_info()
+        user = active_user
+    return {"authenticated": True, "username": user}
+
+
+@app.post("/api/auth/change_password")
+async def api_auth_change_password(req: ChangePasswordRequest):
+    try:
+        updated_user = auth_mod.update_account_credentials(
+            current_password=req.current_password,
+            new_username=req.new_username,
+            new_password=req.new_password,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    token = auth_mod.create_session_token(updated_user, max_age=auth_mod.SESSION_MAX_AGE_REMEMBER)
+    resp = JSONResponse({"ok": True, "username": updated_user})
+    resp.set_cookie(
+        key=auth_mod.SESSION_COOKIE_NAME,
+        value=token,
+        max_age=auth_mod.SESSION_MAX_AGE_REMEMBER,
+        httponly=True,
+        samesite="lax",
+        path="/",
+    )
+    queue_manager.log(f"🔑 Đã cập nhật thông tin bảo mật tài khoản '{updated_user}'.")
+    return resp
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -784,6 +894,8 @@ async def api_get_status():
 @app.get("/api/config")
 async def api_get_config():
     cfg = load_config()
+    cfg.pop("auth_secret_key", None)
+    cfg.pop("auth_password_hash", None)
     cfg["is_cloud"] = cfg_mod.IS_CLOUD
     cfg["has_ephemeral_disk"] = bool(os.environ.get("RENDER")) and not bool(os.environ.get("RENDER_DISK_MOUNT"))
     return cfg
@@ -791,7 +903,11 @@ async def api_get_config():
 
 @app.post("/api/config")
 async def api_save_config(req: Dict[str, Any]):
+    for secret_k in ("auth_secret_key", "auth_password_hash", "auth_username"):
+        req.pop(secret_k, None)
     updated = save_config(req)
+    updated.pop("auth_secret_key", None)
+    updated.pop("auth_password_hash", None)
     updated["is_cloud"] = cfg_mod.IS_CLOUD
     queue_manager.log("Đã lưu cấu hình hệ thống (cai_dat.json).")
     return updated
