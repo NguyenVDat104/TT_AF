@@ -22,6 +22,7 @@ DATA_ROOT = Path(_ENV_DATA_DIR).resolve() if _ENV_DATA_DIR else BASE_DIR
 SAN_PHAM_DIR = DATA_ROOT / "san_pham"
 SAN_SANG_DANG_DIR = DATA_ROOT / "san_sang_dang"
 TAM_DIR = DATA_ROOT / "_tam"
+TEMPLATES_DIR = DATA_ROOT / "_mau_templates"
 CONFIG_PATH = DATA_ROOT / "cai_dat.json"
 
 # Tự động nhận diện môi trường Cloud (Render / Linux container) và chế độ tiết kiệm RAM (512MB)
@@ -133,7 +134,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
 
 def ensure_directories() -> None:
     """Đảm bảo tất cả thư mục làm việc tồn tại."""
-    for folder in (SAN_PHAM_DIR, SAN_SANG_DANG_DIR, TAM_DIR, ASSETS_DIR, STATIC_DIR):
+    for folder in (SAN_PHAM_DIR, SAN_SANG_DANG_DIR, TAM_DIR, TEMPLATES_DIR, ASSETS_DIR, STATIC_DIR):
         folder.mkdir(parents=True, exist_ok=True)
 
 

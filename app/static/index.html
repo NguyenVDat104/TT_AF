@@ -38,20 +38,26 @@
           <span class="tab-count" id="countProducts">0</span>
         </button>
 
+        <button class="tab-btn" data-tab="tab-templates" onclick="switchTab('tab-templates')">
+          <span class="nav-icon">🎞️</span>
+          <span class="nav-label">2. Mẫu Video &amp; Ghi âm</span>
+          <span class="tab-count" id="countTemplates">0</span>
+        </button>
+
         <button class="tab-btn" data-tab="tab-bulk" onclick="switchTab('tab-bulk')">
           <span class="nav-icon">📋</span>
-          <span class="nav-label">2. Dán kịch bản AI</span>
+          <span class="nav-label">3. Dán kịch bản AI</span>
         </button>
 
         <button class="tab-btn" data-tab="tab-review" onclick="switchTab('tab-review')">
           <span class="nav-icon">🎬</span>
-          <span class="nav-label">3. Duyệt video</span>
+          <span class="nav-label">4. Duyệt video</span>
           <span class="tab-count highlight" id="countPendingReview">0</span>
         </button>
 
         <button class="tab-btn" data-tab="tab-ready" onclick="switchTab('tab-ready')">
           <span class="nav-icon">🚀</span>
-          <span class="nav-label">4. Sẵn sàng đăng</span>
+          <span class="nav-label">5. Sẵn sàng đăng</span>
           <span class="tab-count success" id="countReady">0</span>
         </button>
 
@@ -120,7 +126,8 @@
           <div class="toolbar-card">
             <div class="toolbar-left">
               <button class="btn btn-primary" onclick="openNewProductModal()">＋ Thêm sản phẩm mới</button>
-              <button class="btn btn-accent" onclick="renderAllPending()">▶ Làm tất cả video đủ tư liệu</button>
+              <button class="btn btn-accent" onclick="openApplyTemplateModal()" title="Dùng video quay mẫu &amp; ghi âm mẫu, chỉ cần thay ảnh sản phẩm mới để tạo video">⚡ Tạo từ Mẫu Template</button>
+              <button class="btn btn-secondary" onclick="renderAllPending()">▶ Làm tất cả video đủ tư liệu</button>
               <button class="btn btn-secondary local-only-btn" onclick="openFolder('san_pham')">📂 Mở thư mục san_pham</button>
             </div>
             <div class="toolbar-right">
@@ -137,7 +144,28 @@
           </div>
         </section>
 
-        <!-- TAB 2: DÁN KỊCH BẢN HÀNG LOẠT -->
+        <!-- TAB 2: MẪU VIDEO & GHI ÂM (TEMPLATE STUDIO) -->
+        <section id="tab-templates" class="tab-panel">
+          <div class="toolbar-card">
+            <div class="toolbar-left">
+              <button class="btn btn-primary" onclick="openNewTemplateModal()">＋ Thêm Mẫu Template Mới</button>
+              <button class="btn btn-accent" onclick="openApplyTemplateModal()">⚡ Tạo Video Mới Từ Mẫu</button>
+            </div>
+            <div class="toolbar-right">
+              <input type="search" id="searchTemplateInput" class="input-search" placeholder="🔍 Tìm mẫu template..." oninput="renderTemplatesList()" />
+            </div>
+          </div>
+
+          <div class="tip-banner">
+            🎬 <strong>Quy trình Siêu Tốc:</strong> Tải lên <strong>1 video quay mẫu</strong> + <strong>1 file ghi âm giọng thật</strong> lưu thành Template. Mỗi khi có sản phẩm mới, bạn chỉ cần <strong>thay ảnh sản phẩm</strong> là hệ thống tự động ráp ra video trong <strong>10 giây</strong>, không cần viết lại kịch bản!
+          </div>
+
+          <div id="templatesList" class="templates-grid">
+            <!-- JS render -->
+          </div>
+        </section>
+
+        <!-- TAB 3: DÁN KỊCH BẢN HÀNG LOẠT -->
         <section id="tab-bulk" class="tab-panel">
           <div class="grid-2col">
             <div class="card">
@@ -655,6 +683,136 @@
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeAccountModal()">Hủy</button>
         <button class="btn btn-primary" onclick="submitChangePassword()">💾 Cập nhật tài khoản</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 6: TẠO / SỬA MẪU TEMPLATE -->
+  <div id="newTemplateModal" class="modal-backdrop hidden">
+    <div class="modal-dialog modal-md">
+      <div class="modal-header">
+        <h3 id="templateModalTitle">🎬 Thêm Mẫu Template Mới</h3>
+        <button class="btn-close" onclick="closeNewTemplateModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Tên gợi nhớ của Mẫu:</label>
+          <input type="text" id="tplName" placeholder="Ví dụ: Mẫu ốp chống bẩn - giọng nam review" />
+          <input type="hidden" id="tplSlug" />
+        </div>
+
+        <div class="grid-2col" style="gap:12px;">
+          <div class="form-group">
+            <label>📹 Video quay mẫu (.mp4 / .mov):</label>
+            <input type="file" id="tplVideoInput" accept="video/mp4,video/quicktime,video/webm" onchange="previewTplVideo(this)" />
+            <small class="muted-text">Clip quay mẫu trên tay / cận cảnh sản phẩm</small>
+            <div id="tplVideoPreviewWrap" class="mt-6 hidden">
+              <video id="tplVideoPreview" controls style="width:100%;max-height:140px;border-radius:6px;background:#000;"></video>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>🎙️ File ghi âm giọng đọc (.wav / .mp3 / .m4a):</label>
+            <input type="file" id="tplAudioInput" accept="audio/*" onchange="previewTplAudio(this)" />
+            <small class="muted-text">File thu âm giọng thật của bạn</small>
+            <div id="tplAudioPreviewWrap" class="mt-6 hidden">
+              <audio id="tplAudioPreview" controls style="width:100%;margin-top:6px;"></audio>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Câu Tiêu đề / Hook lớn trên Banner:</label>
+          <input type="text" id="tplHook" placeholder="Ví dụ: ĐÂY RỒI! MẪU ỐP LƯNG CHỐNG BẨN ĐANG BÁN CỰC CHẠY" />
+        </div>
+
+        <div class="grid-2col" style="gap:12px;">
+          <div class="form-group">
+            <label>Thời lượng đoạn đầu Banner (giây):</label>
+            <input type="number" id="tplBannerDur" value="6.5" step="0.5" min="3.0" max="15.0" />
+          </div>
+          <div class="form-group">
+            <label>Hashtag mặc định:</label>
+            <input type="text" id="tplHashtag" value="#oplung #phukiendienthoai #xuhuong #tiktokshop" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Link Affiliate mặc định (tùy chọn):</label>
+          <input type="text" id="tplLink" placeholder="https://vt.tiktok.com/..." />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeNewTemplateModal()">Hủy</button>
+        <button class="btn btn-primary" onclick="submitSaveTemplate()">💾 Lưu Mẫu Template</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 7: TẠO VIDEO MỚI TỪ TEMPLATE (CHỈ CẦN THẢ ẢNH) -->
+  <div id="applyTemplateModal" class="modal-backdrop hidden">
+    <div class="modal-dialog modal-md">
+      <div class="modal-header">
+        <h3>⚡ Tạo Video Mới Từ Mẫu Template</h3>
+        <button class="btn-close" onclick="closeApplyTemplateModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="tip-banner mb-10">
+          💡 Chọn mẫu có sẵn, gõ tên sản phẩm và <strong>thả 1 hoặc 2 ảnh sản phẩm mới</strong> vào. Máy sẽ tự ráp thành video hoàn chỉnh trong <strong>10 giây</strong>!
+        </div>
+
+        <div class="form-group">
+          <label>1. Chọn Mẫu Template:</label>
+          <select id="applySelectTemplate" class="input-select" onchange="onApplyTemplateChange()">
+            <!-- JS nạp options -->
+          </select>
+        </div>
+
+        <div id="applyTemplateInfoBox" class="tpl-hook-box mb-10 hidden">
+          <!-- Hook preview -->
+        </div>
+
+        <div class="form-group">
+          <label>2. Tên sản phẩm mới:</label>
+          <input type="text" id="applyProductName" placeholder="Ví dụ: Ốp Lưng Da Bò Cao Cấp 01" />
+        </div>
+
+        <div class="form-group">
+          <label>3. Tải lên 1 hoặc 2 ảnh sản phẩm mới:</label>
+          <div class="drop-zone-box" id="applyDropZone" onclick="document.getElementById('applyFileInput').click()">
+            <div style="font-size:28px;">📷</div>
+            <strong style="display:block;margin-top:6px;">Bấm để chọn hoặc Kéo-thả ảnh vào đây</strong>
+            <span class="muted-text" style="font-size:12px;">(Tải 1 ảnh: máy tự nhân đôi 2 bên. Tải 2 ảnh: ô trái &amp; ô phải)</span>
+            <div id="applyFilesListText" style="margin-top:8px;font-weight:600;color:var(--brand);"></div>
+          </div>
+          <input type="file" id="applyFileInput" multiple accept="image/*" style="display:none;" onchange="onApplyFilesSelected(this)" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeApplyTemplateModal()">Hủy</button>
+        <button class="btn btn-accent" id="btnSubmitApplyTpl" onclick="submitApplyTemplateAndRender()">🚀 Ráp Video Mới Ngay!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 8: GẮN TEMPLATE VÀO SẢN PHẨM CÓ SẴN -->
+  <div id="selectTemplateForProductModal" class="modal-backdrop hidden">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-header">
+        <h3>🎞 Áp dụng Mẫu Template</h3>
+        <button class="btn-close" onclick="closeSelectTemplateForProductModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted-text mb-10">Sản phẩm: <strong id="applyExistingProdSlug"></strong></p>
+        <div class="form-group">
+          <label>Chọn Mẫu Template muốn áp dụng:</label>
+          <select id="selectExistingTemplate" class="input-select"></select>
+        </div>
+        <small class="muted-text">Hệ thống sẽ sao chép video mẫu và file ghi âm mẫu vào sản phẩm này.</small>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeSelectTemplateForProductModal()">Hủy</button>
+        <button class="btn btn-primary" onclick="submitApplyTemplateToExisting()">Áp dụng</button>
       </div>
     </div>
   </div>

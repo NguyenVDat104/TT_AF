@@ -1018,3 +1018,135 @@ async def api_open_folder(req: OpenFolderRequest):
         target_dir = SAN_PHAM_DIR
     _open_in_explorer(target_dir)
     return {"ok": True}
+
+
+# ==================== CÁC API MẪU TEMPLATE (VIDEO QUAY SẴN & GHI ÂM) ====================
+
+@app.get("/api/templates")
+async def api_list_templates():
+    from app import templates_mgr
+    return {"templates": templates_mgr.list_templates()}
+
+
+@app.post("/api/template")
+async def api_save_template(
+    name: str = Form(...),
+    hook: str = Form(...),
+    slug: Optional[str] = Form(None),
+    doc: Optional[str] = Form(""),
+    link: Optional[str] = Form(""),
+    hashtag: Optional[str] = Form(""),
+    banner_duration: Optional[float] = Form(6.5),
+    video_file: Optional[UploadFile] = File(None),
+    audio_file: Optional[UploadFile] = File(None),
+):
+    from app import templates_mgr
+    from app.tts.base import normalize_audio_to_wav48k
+
+    target_slug = slugify_folder(slug or name)
+    t_dir = templates_mgr.get_template_dir(target_slug)
+
+    meta = {
+        "name": name.strip(),
+        "hook": hook.strip(),
+        "doc": (doc or hook).strip(),
+        "link": (link or "").strip(),
+        "hashtag": (hashtag or "#xuhuong #fyp #tiktokshop").strip(),
+        "banner_duration": float(banner_duration or 6.5),
+    }
+
+    if video_file and video_file.filename:
+        ext = Path(video_file.filename).suffix.lower()
+        if ext not in (".mp4", ".mov", ".webm", ".mkv"):
+            raise HTTPException(status_code=400, detail="Định dạng video không được hỗ trợ (cần .mp4/.mov/.webm).")
+        for old_v in t_dir.glob("video_mau.*"):
+            old_v.unlink(missing_ok=True)
+        dst_vid = t_dir / f"video_mau{ext}"
+        with open(dst_vid, "wb") as f_out:
+            shutil.copyfileobj(video_file.file, f_out)
+
+    if audio_file and audio_file.filename:
+        ext = Path(audio_file.filename).suffix.lower()
+        if ext not in (".wav", ".mp3", ".m4a", ".aac", ".ogg"):
+            raise HTTPException(status_code=400, detail="Định dạng âm thanh không được hỗ trợ (cần .mp3/.wav/.m4a).")
+        for old_a in t_dir.glob("ghi_am_mau.*"):
+            old_a.unlink(missing_ok=True)
+        temp_up = t_dir / f"uploaded_audio{ext}"
+        with open(temp_up, "wb") as f_out:
+            shutil.copyfileobj(audio_file.file, f_out)
+        dst_wav = t_dir / "ghi_am_mau.wav"
+        if ext == ".wav":
+            if dst_wav.exists():
+                dst_wav.unlink(missing_ok=True)
+            os.replace(temp_up, dst_wav)
+        else:
+            normalize_audio_to_wav48k(temp_up, dst_wav)
+            temp_up.unlink(missing_ok=True)
+
+    templates_mgr.save_template_metadata(target_slug, meta)
+    queue_manager.log(f"Đã lưu Mẫu Template: {name} ({target_slug})")
+    return {"ok": True, "template": templates_mgr.get_template_info(target_slug)}
+
+
+@app.delete("/api/template/{slug}")
+async def api_delete_template(slug: str):
+    from app import templates_mgr
+    ok = templates_mgr.delete_template(slug)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy template {slug}")
+    queue_manager.log(f"Đã xóa Mẫu Template: {slug}")
+    return {"ok": True}
+
+
+@app.post("/api/template/apply_and_render")
+async def api_apply_template_and_render(
+    template_slug: str = Form(...),
+    product_name: str = Form(...),
+    product_title: Optional[str] = Form(None),
+    files: List[UploadFile] = File(...),
+):
+    from app import templates_mgr
+    if not files:
+        raise HTTPException(status_code=400, detail="Vui lòng tải lên ít nhất 1 ảnh sản phẩm mới.")
+
+    p_slug = slugify_folder(product_name)
+    uploaded_tuples: List[Tuple[str, bytes]] = []
+    for f in files:
+        raw_b = await f.read()
+        if raw_b:
+            uploaded_tuples.append((f.filename or "anh.jpg", raw_b))
+
+    res = templates_mgr.apply_template_to_product(
+        template_slug=template_slug,
+        product_slug=p_slug,
+        product_title=product_title,
+        uploaded_images=uploaded_tuples,
+    )
+
+    queue_manager.enqueue(p_slug, 1)
+    queue_manager.log(f"⚡ Đã tạo sản phẩm '{p_slug}' từ mẫu '{template_slug}' & bắt đầu render video!")
+
+    return {
+        "ok": True,
+        "product": p_slug,
+        "details": res,
+        "status": queue_manager.get_status(),
+    }
+
+
+@app.post("/api/product/apply_template")
+async def api_product_apply_template(req: Dict[str, Any]):
+    from app import templates_mgr
+    prod = slugify_folder(str(req.get("product", "")))
+    tpl = slugify_folder(str(req.get("template", "")))
+    if not prod or not tpl:
+        raise HTTPException(status_code=400, detail="Thiếu thông tin product hoặc template.")
+
+    res = templates_mgr.apply_template_to_product(
+        template_slug=tpl,
+        product_slug=prod,
+        uploaded_images=None,
+    )
+    queue_manager.log(f"Đã áp dụng Mẫu '{tpl}' cho sản phẩm '{prod}'.")
+    return {"ok": True, "product": _build_product_summary(SAN_PHAM_DIR / prod)}
+

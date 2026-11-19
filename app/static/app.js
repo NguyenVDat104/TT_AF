@@ -2,6 +2,7 @@
 
 let STATE = {
   products: [],
+  templates: [],
   config: {},
   queueStatus: { paused: false, current: null, queue: [], logs: [] },
   reviewFilter: "cho_duyet",
@@ -32,6 +33,10 @@ const TAB_META = {
   "tab-products": {
     title: "Sản phẩm & Tư liệu đầu vào",
     subtitle: "Kéo-thả 3 file ảnh/clip vào từng sản phẩm, kiểm tra khung và bấm Làm video",
+  },
+  "tab-templates": {
+    title: "Mẫu Video & Ghi âm sẵn có",
+    subtitle: "Dùng video quay mẫu & file ghi âm giọng thật. Chỉ cần thay ảnh sản phẩm mới là có ngay video trong 10 giây.",
   },
   "tab-bulk": {
     title: "Dán Kịch bản AI Hàng loạt",
@@ -95,6 +100,7 @@ function switchTab(tabId) {
     document.getElementById("pageHeaderSubtitle").textContent = meta.subtitle;
   }
   toggleMobileSidebar(false);
+  if (tabId === "tab-templates") renderTemplatesList();
   if (tabId === "tab-review") renderReviewGrid();
   if (tabId === "tab-ready") loadReadyVideos();
 }
@@ -367,6 +373,7 @@ function renderProductsList() {
                 <button class="btn btn-sm btn-secondary" onclick="openCropModal('${p.slug}')">✂ Chỉnh khung ảnh</button>
                 <button class="btn btn-sm btn-secondary" onclick="openBannerModal('${p.slug}', 1)">👁 Xem banner</button>
                 <button class="btn btn-sm btn-secondary" onclick="openContentModal('${p.slug}')">📝 Sửa nội dung</button>
+                <button class="btn btn-sm btn-ghost" onclick="openApplyTemplateToExisting('${p.slug}')" title="Áp dụng video quay mẫu & ghi âm từ template">🎞 Gắn Mẫu</button>
                 ${!STATE.config.is_cloud ? `<button class="btn btn-sm btn-ghost" onclick="openProductExplorer('${p.slug}')">📂 Mở thư mục</button>` : ""}
                 <button class="btn btn-sm btn-ghost" style="color:#cf222e" onclick="deleteProduct('${p.slug}')">🗑 Xóa</button>
               </div>
@@ -891,7 +898,325 @@ async function openFolder(target, dateFolder = null) {
   });
 }
 
-/* ==================== TAB 2: DÁN KỊCH BẢN HÀNG LOẠT ==================== */
+/* ==================== TAB 2: MẪU TEMPLATE (VIDEO & GHI ÂM) ==================== */
+let SELECTED_APPLY_FILES = [];
+
+async function loadTemplates() {
+  try {
+    const data = await apiFetch("/api/templates");
+    STATE.templates = data.templates || [];
+    const countEl = document.getElementById("countTemplates");
+    if (countEl) countEl.textContent = STATE.templates.length;
+    renderTemplatesList();
+  } catch (err) {
+    console.error("Lỗi tải templates:", err);
+  }
+}
+
+function renderTemplatesList() {
+  const container = document.getElementById("templatesList");
+  if (!container) return;
+
+  const q = (document.getElementById("searchTemplateInput")?.value || "").trim().toLowerCase();
+  const list = STATE.templates.filter((t) => {
+    if (!q) return true;
+    return (t.name || "").toLowerCase().includes(q) || (t.hook || "").toLowerCase().includes(q);
+  });
+
+  if (list.length === 0) {
+    container.innerHTML = `
+      <div class="card center-col" style="grid-column: 1 / -1; padding: 40px; text-align: center;">
+        <div style="font-size: 38px; margin-bottom: 8px;">🎬</div>
+        <h3>Chưa có Mẫu Template nào</h3>
+        <p class="muted-text mt-6">Bấm nút <strong>＋ Thêm Mẫu Template Mới</strong> ở trên để tải lên video quay mẫu &amp; file ghi âm giọng thật của bạn.</p>
+        <button class="btn btn-primary mt-12" onclick="openNewTemplateModal()">＋ Thêm Mẫu Template Mới</button>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = list
+    .map((t) => {
+      const vidEl = t.video_url
+        ? `<video src="${t.video_url}" controls preload="metadata"></video>`
+        : `<div style="color:#999;font-size:12px;text-align:center;padding:20px;">Chưa có video</div>`;
+      const audEl = t.audio_url
+        ? `<audio src="${t.audio_url}" controls style="width:100%;height:32px;"></audio>`
+        : `<div style="color:#999;font-size:12px;">Chưa có file ghi âm</div>`;
+
+      return `
+        <div class="template-card">
+          <div class="tpl-header">
+            <strong class="tpl-title">${escapeHtml(t.name)}</strong>
+            <span class="job-badge">${t.audio_duration ? t.audio_duration + "s âm thanh" : "Mẫu"}</span>
+          </div>
+          <div class="tpl-body">
+            <div class="tpl-media-preview">
+              <div class="tpl-video-thumb">${vidEl}</div>
+              <div class="tpl-audio-block">
+                <label style="font-size:11.5px;font-weight:600;color:var(--muted)">🎙️ Giọng đọc ghi âm:</label>
+                ${audEl}
+                <div class="tpl-hook-box">
+                  <strong>Hook:</strong> ${escapeHtml(t.hook)}
+                </div>
+              </div>
+            </div>
+            <div style="font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between;">
+              <span>⏱ Banner: ${t.banner_duration}s</span>
+              <span>🔗 ${t.link ? "Có Link SP" : "Chưa có link"}</span>
+            </div>
+          </div>
+          <div class="tpl-footer">
+            <button class="btn btn-sm btn-accent" onclick="openApplyTemplateModal('${t.slug}')" title="Thả ảnh sản phẩm mới và xuất video trong 10 giây">⚡ Tạo Video từ Mẫu này</button>
+            <button class="btn btn-sm btn-ghost" style="color:#cf222e;" onclick="deleteTemplate('${t.slug}')" title="Xóa mẫu này">🗑 Xóa</button>
+          </div>
+        </div>`;
+    })
+    .join("");
+}
+
+function openNewTemplateModal() {
+  document.getElementById("tplName").value = "";
+  document.getElementById("tplSlug").value = "";
+  document.getElementById("tplHook").value = "";
+  document.getElementById("tplBannerDur").value = "6.5";
+  document.getElementById("tplHashtag").value = "#oplung #phukiendienthoai #xuhuong #tiktokshop";
+  document.getElementById("tplLink").value = "";
+  document.getElementById("tplVideoInput").value = "";
+  document.getElementById("tplAudioInput").value = "";
+  document.getElementById("tplVideoPreviewWrap").classList.add("hidden");
+  document.getElementById("tplAudioPreviewWrap").classList.add("hidden");
+  document.getElementById("newTemplateModal").classList.remove("hidden");
+}
+
+function closeNewTemplateModal() {
+  document.getElementById("newTemplateModal").classList.add("hidden");
+}
+
+function previewTplVideo(input) {
+  const file = input.files && input.files[0];
+  const wrap = document.getElementById("tplVideoPreviewWrap");
+  const vid = document.getElementById("tplVideoPreview");
+  if (file) {
+    vid.src = URL.createObjectURL(file);
+    wrap.classList.remove("hidden");
+  } else {
+    wrap.classList.add("hidden");
+  }
+}
+
+function previewTplAudio(input) {
+  const file = input.files && input.files[0];
+  const wrap = document.getElementById("tplAudioPreviewWrap");
+  const aud = document.getElementById("tplAudioPreview");
+  if (file) {
+    aud.src = URL.createObjectURL(file);
+    wrap.classList.remove("hidden");
+  } else {
+    wrap.classList.add("hidden");
+  }
+}
+
+async function submitSaveTemplate() {
+  const name = document.getElementById("tplName").value.trim();
+  const hook = document.getElementById("tplHook").value.trim();
+  const videoInput = document.getElementById("tplVideoInput");
+  const audioInput = document.getElementById("tplAudioInput");
+
+  if (!name) return showToast("Vui lòng nhập tên cho Mẫu Template.", "error");
+  if (!hook) return showToast("Vui lòng nhập câu Hook tiêu đề trên Banner.", "error");
+
+  const fd = new FormData();
+  fd.append("name", name);
+  fd.append("hook", hook);
+  fd.append("banner_duration", document.getElementById("tplBannerDur").value || "6.5");
+  fd.append("hashtag", document.getElementById("tplHashtag").value || "");
+  fd.append("link", document.getElementById("tplLink").value || "");
+
+  if (videoInput.files && videoInput.files[0]) {
+    fd.append("video_file", videoInput.files[0]);
+  }
+  if (audioInput.files && audioInput.files[0]) {
+    fd.append("audio_file", audioInput.files[0]);
+  }
+
+  try {
+    showToast("Đang tải lên và lưu Mẫu Template...", "info");
+    const res = await apiFetch("/api/template", {
+      method: "POST",
+      body: fd,
+    });
+    showToast(`Đã lưu Mẫu Template '${res.template.name}' thành công!`, "success");
+    closeNewTemplateModal();
+    await loadTemplates();
+  } catch (err) {
+    showToast(`Lỗi lưu template: ${err.message}`, "error");
+  }
+}
+
+async function deleteTemplate(slug) {
+  if (!confirm(`Bạn có chắc chắn muốn xóa Mẫu Template '${slug}' không?`)) return;
+  try {
+    await apiFetch(`/api/template/${encodeURIComponent(slug)}`, { method: "DELETE" });
+    showToast("Đã xóa Mẫu Template thành công!", "success");
+    await loadTemplates();
+  } catch (err) {
+    showToast(`Lỗi khi xóa: ${err.message}`, "error");
+  }
+}
+
+function openApplyTemplateModal(defaultTplSlug = "") {
+  if (STATE.templates.length === 0) {
+    showToast("Bạn chưa có Mẫu Template nào. Hãy tạo mẫu trước!", "error");
+    switchTab("tab-templates");
+    openNewTemplateModal();
+    return;
+  }
+
+  const select = document.getElementById("applySelectTemplate");
+  select.innerHTML = STATE.templates
+    .map((t) => `<option value="${escapeHtml(t.slug)}">${escapeHtml(t.name)}</option>`)
+    .join("");
+
+  if (defaultTplSlug) {
+    select.value = defaultTplSlug;
+  }
+
+  document.getElementById("applyProductName").value = "";
+  document.getElementById("applyFileInput").value = "";
+  SELECTED_APPLY_FILES = [];
+  document.getElementById("applyFilesListText").textContent = "";
+
+  onApplyTemplateChange();
+  initApplyDropZone();
+  document.getElementById("applyTemplateModal").classList.remove("hidden");
+}
+
+function closeApplyTemplateModal() {
+  document.getElementById("applyTemplateModal").classList.add("hidden");
+}
+
+function onApplyTemplateChange() {
+  const slug = document.getElementById("applySelectTemplate").value;
+  const t = STATE.templates.find((x) => x.slug === slug);
+  const box = document.getElementById("applyTemplateInfoBox");
+  if (t) {
+    box.innerHTML = `<strong>Tiêu đề Banner:</strong> ${escapeHtml(t.hook)}<br><small class="muted-text">Thời lượng banner: ${t.banner_duration}s · Video: ${t.has_video ? "✓ Đã có" : "✗ Chưa có"} · Ghi âm: ${t.has_audio ? "✓ Đã có" : "✗ Chưa có"}</small>`;
+    box.classList.remove("hidden");
+  } else {
+    box.classList.add("hidden");
+  }
+}
+
+function initApplyDropZone() {
+  const dz = document.getElementById("applyDropZone");
+  if (!dz || dz._inited) return;
+  dz._inited = true;
+
+  dz.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dz.classList.add("dragover");
+  });
+  dz.addEventListener("dragleave", (e) => {
+    e.preventDefault();
+    dz.classList.remove("dragover");
+  });
+  dz.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dz.classList.remove("dragover");
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      SELECTED_APPLY_FILES = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
+      updateApplyFilesListUI();
+    }
+  });
+}
+
+function onApplyFilesSelected(input) {
+  if (input.files && input.files.length > 0) {
+    SELECTED_APPLY_FILES = Array.from(input.files).filter((f) => f.type.startsWith("image/"));
+    updateApplyFilesListUI();
+  }
+}
+
+function updateApplyFilesListUI() {
+  const textEl = document.getElementById("applyFilesListText");
+  if (SELECTED_APPLY_FILES.length === 0) {
+    textEl.textContent = "";
+  } else {
+    const names = SELECTED_APPLY_FILES.map((f) => f.name).join(", ");
+    textEl.textContent = `✓ Đã chọn ${SELECTED_APPLY_FILES.length} ảnh: ${names}`;
+  }
+}
+
+async function submitApplyTemplateAndRender() {
+  const tplSlug = document.getElementById("applySelectTemplate").value;
+  const prodName = document.getElementById("applyProductName").value.trim();
+
+  if (!tplSlug) return showToast("Vui lòng chọn một Mẫu Template.", "error");
+  if (!prodName) return showToast("Vui lòng nhập tên cho sản phẩm mới.", "error");
+  if (SELECTED_APPLY_FILES.length === 0) return showToast("Vui lòng chọn ít nhất 1 ảnh sản phẩm mới.", "error");
+
+  const fd = new FormData();
+  fd.append("template_slug", tplSlug);
+  fd.append("product_name", prodName);
+  SELECTED_APPLY_FILES.forEach((f) => {
+    fd.append("files", f);
+  });
+
+  const btn = document.getElementById("btnSubmitApplyTpl");
+  btn.disabled = true;
+  btn.textContent = "⏳ Đang tạo & đưa vào render...";
+
+  try {
+    const res = await apiFetch("/api/template/apply_and_render", {
+      method: "POST",
+      body: fd,
+    });
+    showToast(`⚡ Đã tạo sản phẩm '${res.product}' và đang tự động render video!`, "success");
+    closeApplyTemplateModal();
+    await loadProducts();
+    switchTab("tab-products");
+  } catch (err) {
+    showToast(`Lỗi: ${err.message}`, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "🚀 Ráp Video Mới Ngay!";
+  }
+}
+
+let CURRENT_EXISTING_PROD_SLUG = "";
+
+function openApplyTemplateToExisting(prodSlug) {
+  CURRENT_EXISTING_PROD_SLUG = prodSlug;
+  document.getElementById("applyExistingProdSlug").textContent = prodSlug;
+  const select = document.getElementById("selectExistingTemplate");
+  select.innerHTML = STATE.templates
+    .map((t) => `<option value="${escapeHtml(t.slug)}">${escapeHtml(t.name)}</option>`)
+    .join("");
+  document.getElementById("selectTemplateForProductModal").classList.remove("hidden");
+}
+
+function closeSelectTemplateForProductModal() {
+  document.getElementById("selectTemplateForProductModal").classList.add("hidden");
+}
+
+async function submitApplyTemplateToExisting() {
+  const tpl = document.getElementById("selectExistingTemplate").value;
+  if (!tpl) return showToast("Vui lòng chọn template.", "error");
+  try {
+    await apiFetch("/api/product/apply_template", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ product: CURRENT_EXISTING_PROD_SLUG, template: tpl }),
+    });
+    showToast(`Đã áp dụng mẫu vào sản phẩm '${CURRENT_EXISTING_PROD_SLUG}'!`, "success");
+    closeSelectTemplateForProductModal();
+    await loadProducts();
+  } catch (err) {
+    showToast(`Lỗi: ${err.message}`, "error");
+  }
+}
+
+/* ==================== TAB 3: DÁN KỊCH BẢN HÀNG LOẠT ==================== */
 async function loadPromptTemplate() {
   try {
     const data = await apiFetch("/api/prompt");
@@ -1391,6 +1716,6 @@ function toggleLogDockSize() {
 
 /* ==================== KHỞI ĐỘNG ==================== */
 document.addEventListener("DOMContentLoaded", async () => {
-  await Promise.all([loadCurrentUser(), loadConfigIntoUI(), loadPromptTemplate(), refreshAll()]);
+  await Promise.all([loadCurrentUser(), loadConfigIntoUI(), loadPromptTemplate(), loadTemplates(), refreshAll()]);
   setInterval(loadStatus, 3000);
 });

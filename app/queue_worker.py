@@ -332,7 +332,42 @@ class VideoQueueManager:
             subtitle_ass: Optional[Path] = None
             tts_provider_used = "off"
 
-            if cfg.get("voice_enabled", True):
+            # 1. Kiểm tra xem sản phẩm có sẵn file ghi âm thủ công v{video_no}.wav hoặc ghi_am.wav không
+            custom_voice = video_out_dir / f"v{video_no}.wav"
+            if not custom_voice.exists() or custom_voice.stat().st_size <= 100:
+                custom_voice = prod_dir / "ghi_am.wav"
+            if not custom_voice.exists() or custom_voice.stat().st_size <= 100:
+                custom_voice = prod_dir / "voice.wav"
+
+            if custom_voice.exists() and custom_voice.stat().st_size > 100:
+                out_wav = video_out_dir / f"v{video_no}.wav"
+                if custom_voice.resolve() != out_wav.resolve():
+                    shutil.copy2(custom_voice, out_wav)
+                from app.tts.base import WordTiming, estimate_word_timings_for_sentence, get_wav_duration
+
+                voice_wav = out_wav
+                voice_dur = get_wav_duration(voice_wav)
+                hook_dur = float(cfg.get("banner_min_seconds", 6.5))
+                tts_provider_used = "ghi_am_san"
+                self.log(f"  [1/3] Sử dụng file ghi âm mẫu có sẵn: {custom_voice.name} ({voice_dur:.1f}s)...")
+
+                from app.render import compute_video_durations
+
+                t_tot, t_ban, _ = compute_video_durations(True, voice_dur, hook_dur, cfg)
+                if cfg.get("subtitle_enabled", True):
+                    doc_for_sub = script.doc if script and script.doc else (script.hook if script else "")
+                    if doc_for_sub:
+                        w_timings_raw = estimate_word_timings_for_sentence(doc_for_sub, voice_dur)
+                        w_timings = [WordTiming(w["word"], w["start"], w["end"]) for w in w_timings_raw]
+                        ass_file = snap_dir / f"_sub_v{video_no}.ass"
+                        subtitle_ass = generate_closeup_ass_subtitle(
+                            word_timings=w_timings,
+                            banner_duration=t_ban,
+                            total_duration=t_tot,
+                            out_ass_path=ass_file,
+                            cfg=cfg,
+                        )
+            elif cfg.get("voice_enabled", True):
                 out_wav = video_out_dir / f"v{video_no}.wav"
                 self.log(f"  [1/3] Đang tạo giọng đọc ({cfg.get('tts_provider', 'edge')})...")
                 voice_res = synthesize_script_voice(
