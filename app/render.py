@@ -437,9 +437,16 @@ def compose_fullscreen_kenburns(
     else:
         total_dur = max(min_sec, default_sec)
 
-    # 1. Tìm các ảnh sản phẩm hợp lệ, lọc bỏ ảnh trùng
+    # 1. Tìm tư liệu video clip hoặc ảnh sản phẩm hợp lệ
     candidates = list_candidate_media_files(prod_dir)
+    video_candidates = [p for p in candidates if p.suffix.lower() in VIDEO_EXTS]
     img_candidates = [p for p in candidates if p.suffix.lower() in IMAGE_EXTS]
+
+    has_video_clip = len(video_candidates) > 0
+    chosen_video: Optional[Path] = None
+    if has_video_clip:
+        # Nếu có video clip quay thật: ưu tiên clip có kích thước lớn nhất
+        chosen_video = max(video_candidates, key=lambda p: (p.stat().st_size))
 
     unique_imgs: List[Path] = []
     seen_hashes = set()
@@ -452,16 +459,19 @@ def compose_fullscreen_kenburns(
         except Exception:
             unique_imgs.append(p)
 
-    if not unique_imgs:
+    if not unique_imgs and not has_video_clip:
         m_map = resolve_product_media(prod_dir)
         for slot in ("anh_trai", "anh_phai", "can_canh"):
             p = m_map.get(slot)
-            if p and p.exists() and p.suffix.lower() in IMAGE_EXTS:
-                if p not in unique_imgs:
+            if p and p.exists():
+                if p.suffix.lower() in VIDEO_EXTS and not chosen_video:
+                    chosen_video = p
+                    has_video_clip = True
+                elif p.suffix.lower() in IMAGE_EXTS and p not in unique_imgs:
                     unique_imgs.append(p)
 
-    if not unique_imgs:
-        raise FileNotFoundError(f"Sản phẩm {prod_dir.name} chưa có file ảnh nào để làm video toàn màn hình.")
+    if not unique_imgs and not has_video_clip:
+        raise FileNotFoundError(f"Sản phẩm {prod_dir.name} chưa có file ảnh hoặc video nào để làm video.")
 
     frames = get_product_frames(prod_dir)
     var = get_variation_params(video_no, cfg)
@@ -469,60 +479,82 @@ def compose_fullscreen_kenburns(
     if var.get("swap_slots", False) and len(unique_imgs) > 1:
         unique_imgs = list(reversed(unique_imgs))
 
-    # 2. Tạo badge tiêu đề Hook ở trên
+    top_badge_on = bool(cfg.get("top_badge_enabled", False))
     badge_png = w_dir / f"_hook_badge_v{video_no}.png"
-    make_top_hook_badge(hook_text=hook_text, out_badge_png=badge_png, cfg=cfg, video_no=video_no)
+    if top_badge_on:
+        make_top_hook_badge(hook_text=hook_text, out_badge_png=badge_png, cfg=cfg, video_no=video_no)
 
-    # 3. Phân chia các đoạn chuyển động (segments)
-    segments_info: List[Dict[str, Any]] = []
-    if len(unique_imgs) == 1:
-        dur_1 = round(total_dur / 2.0, 2)
-        dur_2 = round(total_dur - dur_1, 2)
-        segments_info = [
-            {"img": unique_imgs[0], "dur": dur_1, "motion": "zoom_in"},
-            {"img": unique_imgs[0], "dur": dur_2, "motion": "zoom_out"},
-        ]
-    elif len(unique_imgs) == 2:
-        dur_1 = round(total_dur / 2.0, 2)
-        dur_2 = round(total_dur - dur_1, 2)
-        segments_info = [
-            {"img": unique_imgs[0], "dur": dur_1, "motion": "zoom_in"},
-            {"img": unique_imgs[1], "dur": dur_2, "motion": "zoom_out"},
-        ]
-    else:
-        num_seg = len(unique_imgs)
-        seg_dur = round(total_dur / num_seg, 2)
-        for i, img_p in enumerate(unique_imgs):
-            d = seg_dur if i < num_seg - 1 else round(total_dur - seg_dur * (num_seg - 1), 2)
-            motion = "zoom_in" if (i % 2 == 0) else "zoom_out"
-            segments_info.append({"img": img_p, "dur": d, "motion": motion})
-
+    # 2. Xử lý khung hình: Nếu có video quay thật -> dùng video clip; Nếu là ảnh -> phân chia segments Ken Burns
     rendered_frames: List[Path] = []
-    for idx, seg in enumerate(segments_info):
-        img_p = seg["img"]
-        f_info = frames.get(img_p.stem, frames.get("anh_trai", {}))
-        cx = float(f_info.get("cx", 0.5))
-        cy = float(f_info.get("cy", 0.5))
-        z = float(f_info.get("z", 1.0))
+    segments_info: List[Dict[str, Any]] = []
 
-        src_im = load_image_for_media(img_p)
-        slot_rendered = render_slot_image(src_im, VIDEO_W, VIDEO_H, cx=cx, cy=cy, z=z)
-        frame_png = w_dir / f"_full_frame_{idx}_v{video_no}.png"
-        slot_rendered.save(frame_png, "PNG")
-        rendered_frames.append(frame_png)
+    if not has_video_clip:
+        if len(unique_imgs) == 1:
+            dur_1 = round(total_dur / 2.0, 2)
+            dur_2 = round(total_dur - dur_1, 2)
+            segments_info = [
+                {"img": unique_imgs[0], "dur": dur_1, "motion": "zoom_in"},
+                {"img": unique_imgs[0], "dur": dur_2, "motion": "zoom_out"},
+            ]
+        elif len(unique_imgs) == 2:
+            dur_1 = round(total_dur / 2.0, 2)
+            dur_2 = round(total_dur - dur_1, 2)
+            segments_info = [
+                {"img": unique_imgs[0], "dur": dur_1, "motion": "zoom_in"},
+                {"img": unique_imgs[1], "dur": dur_2, "motion": "zoom_out"},
+            ]
+        else:
+            num_seg = len(unique_imgs)
+            seg_dur = round(total_dur / num_seg, 2)
+            for i, img_p in enumerate(unique_imgs):
+                d = seg_dur if i < num_seg - 1 else round(total_dur - seg_dur * (num_seg - 1), 2)
+                motion = "zoom_in" if (i % 2 == 0) else "zoom_out"
+                segments_info.append({"img": img_p, "dur": d, "motion": motion})
+
+        for idx, seg in enumerate(segments_info):
+            img_p = seg["img"]
+            f_info = frames.get(img_p.stem, frames.get("anh_trai", {}))
+            cx = float(f_info.get("cx", 0.5))
+            cy = float(f_info.get("cy", 0.5))
+            z = float(f_info.get("z", 1.0))
+
+            src_im = load_image_for_media(img_p)
+            slot_rendered = render_slot_image(src_im, VIDEO_W, VIDEO_H, cx=cx, cy=cy, z=z)
+            frame_png = w_dir / f"_full_frame_{idx}_v{video_no}.png"
+            slot_rendered.save(frame_png, "PNG")
+            rendered_frames.append(frame_png)
 
     # Lưu lại ảnh xem trước vào _video/banner_v{video_no}.png
     preview_png = prod_dir / "_video" / f"banner_v{video_no}.png"
     preview_png.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        base_prev = Image.open(rendered_frames[0]).convert("RGBA")
-        badge_rgba = Image.open(badge_png).convert("RGBA")
-        combined_prev = Image.alpha_composite(base_prev, badge_rgba)
-        combined_prev.convert("RGB").save(preview_png, "PNG")
-    except Exception:
-        pass
+    if has_video_clip and chosen_video:
+        ffmpeg_bin = find_binary("ffmpeg")
+        cmd_prev = [
+            ffmpeg_bin, "-y",
+            "-ss", "0.5",
+            "-i", str(chosen_video.resolve()),
+            "-vframes", "1",
+            "-q:v", "2",
+            str(preview_png.resolve()),
+        ]
+        subprocess.run(
+            cmd_prev,
+            capture_output=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+    elif rendered_frames:
+        try:
+            base_prev = Image.open(rendered_frames[0]).convert("RGBA")
+            if top_badge_on and badge_png.exists():
+                badge_rgba = Image.open(badge_png).convert("RGBA")
+                combined_prev = Image.alpha_composite(base_prev, badge_rgba)
+                combined_prev.convert("RGB").save(preview_png, "PNG")
+            else:
+                base_prev.convert("RGB").save(preview_png, "PNG")
+        except Exception:
+            pass
 
-    # 4. Xây dựng lệnh FFmpeg
+    # 3. Xây dựng lệnh FFmpeg
     inputs: List[str] = []
     filter_parts: List[str] = []
     input_counter = 0
@@ -534,37 +566,50 @@ def compose_fullscreen_kenburns(
         input_counter += 1
         return idx
 
-    seg_labels: List[str] = []
-    for idx, (seg, frame_path) in enumerate(zip(segments_info, rendered_frames)):
-        d = seg["dur"]
-        motion = seg["motion"]
-        in_idx = _add_input(["-loop", "1", "-t", f"{d:.2f}", "-r", str(FPS), "-i", str(frame_path.resolve())])
-        out_lbl = f"v_seg_{idx}"
-        seg_labels.append(out_lbl)
-
-        if motion == "zoom_in":
-            scale_expr = (
-                f"[{in_idx}:v]scale=w='trunc(1080*(1.0+0.09*t/{d:.2f})/2)*2':"
-                f"h='trunc(1920*(1.0+0.09*t/{d:.2f})/2)*2':eval=frame,"
-                f"crop=1080:1920,fps={FPS},format=rgba,setsar=1[{out_lbl}]"
-            )
-        else:
-            scale_expr = (
-                f"[{in_idx}:v]scale=w='trunc(1080*(1.09-0.08*t/{d:.2f})/2)*2':"
-                f"h='trunc(1920*(1.09-0.08*t/{d:.2f})/2)*2':eval=frame,"
-                f"crop=1080:1920,fps={FPS},format=rgba,setsar=1[{out_lbl}]"
-            )
-        filter_parts.append(scale_expr)
-
-    if len(seg_labels) > 1:
-        inputs_concat = "".join(f"[{lbl}]" for lbl in seg_labels)
-        filter_parts.append(f"{inputs_concat}concat=n={len(seg_labels)}:v=1:a=0,setsar=1[v_concat]")
-        base_v_lbl = "v_concat"
+    if has_video_clip and chosen_video:
+        idx_vid = _add_input(["-stream_loop", "-1", "-i", str(chosen_video.resolve())])
+        filter_parts.append(
+            f"[{idx_vid}:v]trim=duration={total_dur:.2f},setpts=PTS-STARTPTS,"
+            f"scale=1080:1920:force_original_aspect_ratio=increase,"
+            f"crop=1080:1920,fps={FPS},setsar=1,format=rgba[v_base]"
+        )
+        base_v_lbl = "v_base"
     else:
-        base_v_lbl = seg_labels[0]
+        seg_labels: List[str] = []
+        for idx, (seg, frame_path) in enumerate(zip(segments_info, rendered_frames)):
+            d = seg["dur"]
+            motion = seg["motion"]
+            in_idx = _add_input(["-loop", "1", "-t", f"{d:.2f}", "-r", str(FPS), "-i", str(frame_path.resolve())])
+            out_lbl = f"v_seg_{idx}"
+            seg_labels.append(out_lbl)
 
-    idx_badge = _add_input(["-loop", "1", "-t", f"{total_dur:.2f}", "-r", str(FPS), "-i", str(badge_png.resolve())])
-    filter_parts.append(f"[{base_v_lbl}][{idx_badge}:v]overlay=0:0:format=auto,setsar=1[v_badged]")
+            if motion == "zoom_in":
+                scale_expr = (
+                    f"[{in_idx}:v]scale=w='trunc(1080*(1.0+0.09*t/{d:.2f})/2)*2':"
+                    f"h='trunc(1920*(1.0+0.09*t/{d:.2f})/2)*2':eval=frame,"
+                    f"crop=1080:1920,fps={FPS},format=rgba,setsar=1[{out_lbl}]"
+                )
+            else:
+                scale_expr = (
+                    f"[{in_idx}:v]scale=w='trunc(1080*(1.09-0.08*t/{d:.2f})/2)*2':"
+                    f"h='trunc(1920*(1.09-0.08*t/{d:.2f})/2)*2':eval=frame,"
+                    f"crop=1080:1920,fps={FPS},format=rgba,setsar=1[{out_lbl}]"
+                )
+            filter_parts.append(scale_expr)
+
+        if len(seg_labels) > 1:
+            inputs_concat = "".join(f"[{lbl}]" for lbl in seg_labels)
+            filter_parts.append(f"{inputs_concat}concat=n={len(seg_labels)}:v=1:a=0,setsar=1[v_concat]")
+            base_v_lbl = "v_concat"
+        else:
+            base_v_lbl = seg_labels[0]
+
+    if top_badge_on and badge_png.exists():
+        idx_badge = _add_input(["-loop", "1", "-t", f"{total_dur:.2f}", "-r", str(FPS), "-i", str(badge_png.resolve())])
+        filter_parts.append(f"[{base_v_lbl}][{idx_badge}:v]overlay=0:0:format=auto,setsar=1[v_badged]")
+        post_input_lbl = "v_badged"
+    else:
+        post_input_lbl = base_v_lbl
 
     sharpen_val = max(0.0, min(2.0, float(cfg.get("sharpen", 0.5))))
     post_filters: List[str] = [f"unsharp=5:5:{sharpen_val:.2f}:5:5:0.0"]
@@ -579,7 +624,7 @@ def compose_fullscreen_kenburns(
 
     post_filters.append("format=yuv420p")
     post_chain = ",".join(post_filters)
-    filter_parts.append(f"[v_badged]{post_chain}[v_out]")
+    filter_parts.append(f"[{post_input_lbl}]{post_chain}[v_out]")
 
     music_str = str(cfg.get("music_path", "")).strip()
     music_file = Path(music_str) if music_str else None
