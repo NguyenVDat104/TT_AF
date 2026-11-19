@@ -323,7 +323,7 @@ def _build_video_slot_filter(
         crop_y = max(0, -pos_y)
         return (
             f"{base_trim},scale={scaled_w}:{scaled_h},"
-            f"crop={slot_w}:{slot_h}:{crop_x}:{crop_y},format=rgba[{out_label}]"
+            f"crop={slot_w}:{slot_h}:{crop_x}:{crop_y},setsar=1,format=rgba[{out_label}]"
         )
 
     bg_lbl = f"{out_label}_bg"
@@ -334,8 +334,8 @@ def _build_video_slot_filter(
         f"{base_trim},split=2[{bg_lbl}][{fg_lbl}];"
         f"[{bg_lbl}]scale={slot_w}:{slot_h}:force_original_aspect_ratio=increase,"
         f"crop={slot_w}:{slot_h},boxblur={blur_setting},eq=brightness={darken_val:.2f}[{bg_proc}];"
-        f"[{fg_lbl}]scale={scaled_w}:{scaled_h}[{fg_proc}];"
-        f"[{bg_proc}][{fg_proc}]overlay={pos_x}:{pos_y}:format=auto,format=rgba[{out_label}]"
+        f"[{fg_lbl}]scale={scaled_w}:{scaled_h},setsar=1[{fg_proc}];"
+        f"[{bg_proc}][{fg_proc}]overlay={pos_x}:{pos_y}:format=auto,setsar=1,format=rgba[{out_label}]"
     )
 
 
@@ -537,7 +537,10 @@ def compose_video(
 
     post_filters.append("format=yuv420p")
     post_chain = ",".join(post_filters)
-    filter_parts.append(f"[v_banner][v_closeup]concat=n=2:v=1:a=0,{post_chain}[v_out]")
+    filter_parts.append(
+        f"[v_banner]setsar=1[v_ban_sar];[v_closeup]setsar=1[v_cc_sar];"
+        f"[v_ban_sar][v_cc_sar]concat=n=2:v=1:a=0,{post_chain}[v_out]"
+    )
 
     # 4. Nhánh Âm thanh [a_out]
     music_str = str(cfg.get("music_path", "")).strip()
