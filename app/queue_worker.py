@@ -110,6 +110,7 @@ class VideoQueueManager:
         line = f"[{ts}] {message}"
         with self._lock:
             self._logs.append(line)
+        print(line, flush=True)
 
     def get_logs(self, limit: int = 60) -> List[str]:
         with self._lock:

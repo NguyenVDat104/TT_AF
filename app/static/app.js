@@ -317,12 +317,22 @@ function renderProductsList() {
               <strong>Video ${v.video_no}</strong>
               <div class="v-hook-preview" title="${escapeHtml(v.hook)}">
                 ${v.hook ? escapeHtml(v.hook) : '<em style="color:#999">Chưa có kịch bản</em>'}
-                ${v.error ? `<div style="color:#cf222e;font-size:11.5px;">⚠ ${escapeHtml(v.error)}</div>` : ""}
+                ${v.error ? `<div style="color:#cf222e;font-size:11.5px;font-weight:600;margin-top:2px;">⚠ ${escapeHtml(v.error)}</div>` : ""}
               </div>
               <span class="state-badge state-${v.state}" ${errAttr}>${stLabel}${durTxt}</span>
-              <button class="btn btn-xs btn-secondary" onclick="renderProductVideos('${p.slug}', ${v.video_no})" ${!p.ready_to_render || !v.has_script ? "disabled" : ""}>
-                ▶ Làm v${v.video_no}
-              </button>
+              ${
+                v.state === "cho_duyet"
+                  ? `<button class="btn btn-xs btn-accent" onclick="switchTab('tab-review'); selectReviewCard('${p.slug}__${v.video_no}')" title="Xem thử và duyệt video này">👁 Xem & Duyệt</button>`
+                  : v.state === "da_duyet"
+                  ? `<button class="btn btn-xs btn-primary" onclick="switchTab('tab-ready')" title="Đã duyệt! Bấm để sang mục tải video">📦 Tải về</button>`
+                  : v.state === "loi"
+                  ? `<button class="btn btn-xs btn-secondary" style="border-color:#cf222e;color:#cf222e;" onclick="renderProductVideos('${p.slug}', ${v.video_no})" title="Bấm để chạy lại video này">↺ Làm lại</button>`
+                  : v.state === "dang_lam"
+                  ? `<button class="btn btn-xs btn-secondary" disabled>⚙ Đang làm...</button>`
+                  : v.state === "trong_hang_doi"
+                  ? `<button class="btn btn-xs btn-secondary" disabled>⏳ Chờ...</button>`
+                  : `<button class="btn btn-xs btn-secondary" onclick="renderProductVideos('${p.slug}', ${v.video_no})" ${!p.ready_to_render || !v.has_script ? "disabled" : ""}>▶ Làm v${v.video_no}</button>`
+              }
             </div>`;
         })
         .join("");
