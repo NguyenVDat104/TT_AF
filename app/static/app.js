@@ -896,6 +896,41 @@ async function copyPromptTemplate() {
   showToast("Đã sao chép lệnh mẫu vào bộ nhớ tạm!", "success");
 }
 
+async function savePromptTemplate() {
+  const txt = document.getElementById("promptTemplateBox").value;
+  try {
+    await apiFetch("/api/prompt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: txt }),
+    });
+    showToast("Đã lưu lệnh mẫu thành công!", "success");
+  } catch (err) {
+    showToast(`Lỗi khi lưu lệnh mẫu: ${err.message}`, "danger");
+  }
+}
+
+async function resetPromptTemplate() {
+  if (!confirm("Bạn có chắc chắn muốn đặt lại lệnh mẫu về mặc định của hệ thống không?")) {
+    return;
+  }
+  try {
+    const res = await apiFetch("/api/prompt/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    if (res && res.prompt) {
+      document.getElementById("promptTemplateBox").value = res.prompt;
+    } else {
+      await loadPromptTemplate();
+    }
+    showToast("Đã khôi phục lệnh mẫu về mặc định!", "success");
+  } catch (err) {
+    showToast(`Lỗi khi đặt lại: ${err.message}`, "danger");
+  }
+}
+
 async function previewBulkScripts() {
   const text = document.getElementById("bulkPasteInput").value;
   if (!text.trim()) return showToast("Ô kịch bản hàng loạt đang trống.", "error");

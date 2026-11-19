@@ -113,3 +113,28 @@ DOC: Chiếc ốp lưng siêu bền! Chống va đập bốn góc cực tốt.
         assert len(days) == 1
         assert days[0]["items"][0]["filename"] == "op_lung_test_v1.mp4"
         assert "Mua tại đây: https://vt.tiktok.com/ZStest/" in days[0]["items"][0]["caption"]
+
+        # 9. Kiểm tra xem, chỉnh sửa, lưu và đặt lại prompt template
+        test_prompt_file = tmp_path / "prompt_test.txt"
+        monkeypatch.setattr(main, "PROMPT_TEMPLATE_PATH", test_prompt_file)
+        
+        # Lấy mặc định khi file chưa tồn tại
+        r_prompt_init = client.get("/api/prompt")
+        assert r_prompt_init.status_code == 200
+        assert "Bạn là chuyên gia" in r_prompt_init.json()["prompt"]
+
+        # Lưu prompt mới
+        custom_prompt = "Đây là prompt tuỳ chỉnh của tôi: Viết kịch bản ngắn gọn."
+        r_prompt_save = client.post("/api/prompt", json={"prompt": custom_prompt})
+        assert r_prompt_save.status_code == 200
+        assert r_prompt_save.json()["ok"] is True
+
+        # Đọc lại xem đã lưu chưa
+        r_prompt_read = client.get("/api/prompt")
+        assert r_prompt_read.status_code == 200
+        assert r_prompt_read.json()["prompt"] == custom_prompt
+
+        # Đặt lại mặc định
+        r_prompt_reset = client.post("/api/prompt/reset")
+        assert r_prompt_reset.status_code == 200
+        assert "Bạn là chuyên gia" in r_prompt_reset.json()["prompt"]

@@ -143,12 +143,16 @@
             <div class="card">
               <div class="card-header">
                 <div>
-                  <h3>Bước 1: Sao chép lệnh mẫu cho AI</h3>
-                  <p class="muted-text">Dùng với Claude, ChatGPT hoặc Gemini để viết 1 lần nhiều sản phẩm</p>
+                  <h3>Bước 1: Chỉnh sửa &amp; Sao chép lệnh mẫu cho AI</h3>
+                  <p class="muted-text">Bạn có thể sửa trực tiếp mẫu prompt theo ý thích rồi bấm Lưu, hoặc sao chép gửi AI.</p>
                 </div>
-                <button class="btn btn-primary btn-sm" onclick="copyPromptTemplate()">📋 Sao chép lệnh mẫu</button>
+                <div class="btn-group">
+                  <button class="btn btn-primary btn-sm" onclick="copyPromptTemplate()" title="Sao chép toàn bộ lệnh để gửi cho ChatGPT/Claude/Gemini">📋 Sao chép</button>
+                  <button class="btn btn-accent btn-sm" onclick="savePromptTemplate()" title="Lưu lại nội dung bạn vừa chỉnh sửa để dùng cho các lần sau">💾 Lưu thay đổi</button>
+                  <button class="btn btn-secondary btn-sm" onclick="resetPromptTemplate()" title="Khôi phục lại mẫu gốc ban đầu của hệ thống">↺ Mặc định</button>
+                </div>
               </div>
-              <textarea id="promptTemplateBox" class="code-textarea" rows="17" readonly></textarea>
+              <textarea id="promptTemplateBox" class="code-textarea" rows="17" placeholder="Nội dung lệnh mẫu viết kịch bản AI..."></textarea>
             </div>
 
             <div class="card">

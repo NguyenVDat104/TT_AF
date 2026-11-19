@@ -116,3 +116,7 @@ class ChangePasswordRequest(BaseModel):
     new_username: str
     new_password: str
 
+
+class SavePromptRequest(BaseModel):
+    prompt: str
+
