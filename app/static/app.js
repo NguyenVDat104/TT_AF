@@ -115,13 +115,13 @@ async function loadCurrentUser() {
     document.getElementById("currentUsernameDisplay").textContent = uname;
     document.getElementById("userAvatarLetter").textContent = uname.charAt(0).toUpperCase();
     document.getElementById("accNewUsername").value = uname;
-  } catch (_) {}
+  } catch (_) { }
 }
 
 async function logoutAccount() {
   try {
     await fetch("/api/auth/logout", { method: "POST" });
-  } catch (_) {}
+  } catch (_) { }
   window.location.href = "/login";
 }
 
@@ -220,7 +220,7 @@ async function loadReadyCountOnly() {
     let total = 0;
     (data.days || []).forEach((d) => (total += d.count));
     document.getElementById("countReady").textContent = total;
-  } catch (_) {}
+  } catch (_) { }
 }
 
 function updateQueueUI(st) {
@@ -320,19 +320,18 @@ function renderProductsList() {
                 ${v.error ? `<div style="color:#cf222e;font-size:11.5px;font-weight:600;margin-top:2px;">⚠ ${escapeHtml(v.error)}</div>` : ""}
               </div>
               <span class="state-badge state-${v.state}" ${errAttr}>${stLabel}${durTxt}</span>
-              ${
-                v.state === "cho_duyet"
-                  ? `<button class="btn btn-xs btn-accent" onclick="switchTab('tab-review'); selectReviewCard('${p.slug}__${v.video_no}')" title="Xem thử và duyệt video này">👁 Xem & Duyệt</button>`
-                  : v.state === "da_duyet"
-                  ? `<button class="btn btn-xs btn-primary" onclick="switchTab('tab-ready')" title="Đã duyệt! Bấm để sang mục tải video">📦 Tải về</button>`
-                  : v.state === "loi"
+              ${v.state === "cho_duyet"
+              ? `<button class="btn btn-xs btn-accent" onclick="switchTab('tab-review'); selectReviewCard('${p.slug}__${v.video_no}')" title="Xem thử và duyệt video này">👁 Xem & Duyệt</button>`
+              : v.state === "da_duyet"
+                ? `<button class="btn btn-xs btn-primary" onclick="switchTab('tab-ready')" title="Đã duyệt! Bấm để sang mục tải video">📦 Tải về</button>`
+                : v.state === "loi"
                   ? `<button class="btn btn-xs btn-secondary" style="border-color:#cf222e;color:#cf222e;" onclick="renderProductVideos('${p.slug}', ${v.video_no})" title="Bấm để chạy lại video này">↺ Làm lại</button>`
                   : v.state === "dang_lam"
-                  ? `<button class="btn btn-xs btn-secondary" disabled>⚙ Đang làm...</button>`
-                  : v.state === "trong_hang_doi"
-                  ? `<button class="btn btn-xs btn-secondary" disabled>⏳ Chờ...</button>`
-                  : `<button class="btn btn-xs btn-secondary" onclick="renderProductVideos('${p.slug}', ${v.video_no})" ${!p.ready_to_render || !v.has_script ? "disabled" : ""}>▶ Làm v${v.video_no}</button>`
-              }
+                    ? `<button class="btn btn-xs btn-secondary" disabled>⚙ Đang làm...</button>`
+                    : v.state === "trong_hang_doi"
+                      ? `<button class="btn btn-xs btn-secondary" disabled>⏳ Chờ...</button>`
+                      : `<button class="btn btn-xs btn-secondary" onclick="renderProductVideos('${p.slug}', ${v.video_no})" ${!p.ready_to_render || !v.has_script ? "disabled" : ""}>▶ Làm v${v.video_no}</button>`
+            }
             </div>`;
         })
         .join("");
@@ -897,7 +896,7 @@ async function loadPromptTemplate() {
   try {
     const data = await apiFetch("/api/prompt");
     document.getElementById("promptTemplateBox").value = data.prompt || "";
-  } catch (_) {}
+  } catch (_) { }
 }
 
 async function copyPromptTemplate() {

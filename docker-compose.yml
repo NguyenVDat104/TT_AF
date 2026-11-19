@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  xuong-video-tiktok:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: xuong-video-tiktok:latest
+    container_name: xuong_video_tiktok
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    environment:
+      - PORT=8765
+      - PYTHONUTF8=1
+      - LOW_MEMORY_MODE=0
+      - APP_USER=admin
+      - APP_PASSWORD=admin
+      - DATA_DIR=/app/data
+    volumes:
+      - ./san_pham:/app/data/san_pham
+      - ./san_sang_dang:/app/data/san_sang_dang
+      - ./_tam:/app/data/_tam
+      - ./cai_dat.json:/app/data/cai_dat.json
+      - ./MAU_LENH_VIET_KICH_BAN.txt:/app/MAU_LENH_VIET_KICH_BAN.txt
