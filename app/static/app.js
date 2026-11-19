@@ -1529,6 +1529,7 @@ async function loadConfigIntoUI() {
     });
 
     const valKeys = [
+      "video_layout",
       "tts_provider",
       "edge_voice",
       "edge_rate",
@@ -1583,6 +1584,7 @@ function onChangeTTSProviderUI() {
 
 function collectSettingsFromUI() {
   return {
+    video_layout: document.getElementById("cfg_video_layout")?.value || "fullscreen_kenburns",
     voice_enabled: document.getElementById("cfg_voice_enabled").checked,
     tts_provider: document.getElementById("cfg_tts_provider").value,
     edge_voice: document.getElementById("cfg_edge_voice").value,

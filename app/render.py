@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import gc
+import hashlib
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -11,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont
 
 from app.config import ASSETS_DIR, IS_LOW_MEMORY, TAM_DIR, find_binary
-from app.content import VIDEO_EXTS, resolve_product_media
+from app.content import IMAGE_EXTS, VIDEO_EXTS, list_candidate_media_files, resolve_product_media
 from app.crop import (
     get_product_frames,
     load_image_for_media,
@@ -232,6 +234,73 @@ def make_band_overlay(
     return out_band_png
 
 
+def make_top_hook_badge(
+    hook_text: str,
+    out_badge_png: Path,
+    cfg: Dict[str, Any],
+    video_no: int = 1,
+) -> Path:
+    """Tạo badge tiêu đề Hook ở góc trên màn hình (1080x1920 RGBA) cho video toàn màn hình."""
+    var = get_variation_params(video_no, cfg)
+    band_rgb = _parse_hex_rgb(var["band_hex"])
+    accent_rgb = var["accent_bar_rgb"]
+
+    canvas = Image.new("RGBA", (VIDEO_W, VIDEO_H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+
+    display_text = (hook_text or "").strip()
+    if cfg.get("hook_uppercase", True):
+        display_text = display_text.upper()
+
+    if not display_text:
+        out_badge_png.parent.mkdir(parents=True, exist_ok=True)
+        canvas.save(out_badge_png, "PNG")
+        return out_badge_png
+
+    badge_w = 960
+    max_text_w = 880
+    start_size = max(36, min(54, int(cfg.get("hook_font_size", 44))))
+    font = load_hook_font(start_size, cfg)
+    tag_font = load_hook_font(24, cfg)
+
+    lines = _wrap_text_lines(draw, display_text, font, max_text_w)
+    if len(lines) > 3:
+        font = load_hook_font(max(30, start_size - 8), cfg)
+        lines = _wrap_text_lines(draw, display_text, font, max_text_w)
+
+    line_h = max(38, int(round(start_size * 1.22)))
+    total_text_h = len(lines) * line_h + 36
+    badge_h = total_text_h + 36
+
+    bx0 = (VIDEO_W - badge_w) // 2
+    by0 = 150
+    bx1 = bx0 + badge_w
+    by1 = by0 + badge_h
+
+    # Vẽ nền rounded rectangle với viền màu nổi bật
+    draw.rounded_rectangle(
+        [bx0, by0, bx1, by1],
+        radius=24,
+        fill=(*band_rgb, 235),
+        outline=(*accent_rgb, 255),
+        width=3,
+    )
+
+    # Tag nhỏ phía trên
+    draw.text((bx0 + 36, by0 + 16), "🔥 GỢI Ý TIKTOK SHOP", font=tag_font, fill=(*accent_rgb, 255))
+
+    # Các dòng chữ tiêu đề
+    cur_y = by0 + 52
+    for l in lines:
+        draw.text((bx0 + 38, cur_y + 2), l, font=font, fill=(0, 0, 0, 110))
+        draw.text((bx0 + 36, cur_y), l, font=font, fill=(255, 255, 255, 255))
+        cur_y += line_h
+
+    out_badge_png.parent.mkdir(parents=True, exist_ok=True)
+    canvas.save(out_badge_png, "PNG")
+    return out_badge_png
+
+
 def make_banner(
     prod_dir: Path,
     hook_text: str,
@@ -339,6 +408,283 @@ def _build_video_slot_filter(
     )
 
 
+def compose_fullscreen_kenburns(
+    prod_dir: Path,
+    video_no: int,
+    hook_text: str,
+    out_mp4: Path,
+    cfg: Dict[str, Any],
+    voice_wav: Optional[Path] = None,
+    voice_duration: float = 0.0,
+    hook_duration: float = 0.0,
+    subtitle_ass: Optional[Path] = None,
+    work_dir: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Tạo video 9:16 toàn màn hình chuyển động Ken Burns từ ảnh sản phẩm.
+
+    Bỏ hoàn toàn đoạn banner 2 ô và bỏ video mẫu cũ. Toàn bộ thời lượng video
+    tập trung làm nổi bật hình ảnh chiếc ốp / sản phẩm đã tải lên kèm chuyển động lia máy,
+    badge tiêu đề ở trên, phụ đề động chạy suốt video và âm thanh đồng bộ.
+    """
+    w_dir = work_dir or (TAM_DIR / f"render_full_{prod_dir.name}_v{video_no}")
+    w_dir.mkdir(parents=True, exist_ok=True)
+
+    voice_enabled = bool(cfg.get("voice_enabled", True)) and voice_wav is not None and voice_wav.exists()
+    min_sec = float(cfg.get("min_seconds", 18.0))
+    default_sec = float(cfg.get("default_seconds", 19.0))
+    if voice_enabled and voice_duration > 0.05:
+        total_dur = max(min_sec, round(voice_duration + 0.6, 2))
+    else:
+        total_dur = max(min_sec, default_sec)
+
+    # 1. Tìm các ảnh sản phẩm hợp lệ, lọc bỏ ảnh trùng
+    candidates = list_candidate_media_files(prod_dir)
+    img_candidates = [p for p in candidates if p.suffix.lower() in IMAGE_EXTS]
+
+    unique_imgs: List[Path] = []
+    seen_hashes = set()
+    for p in img_candidates:
+        try:
+            h = hashlib.md5(p.read_bytes()).hexdigest()
+            if h not in seen_hashes:
+                seen_hashes.add(h)
+                unique_imgs.append(p)
+        except Exception:
+            unique_imgs.append(p)
+
+    if not unique_imgs:
+        m_map = resolve_product_media(prod_dir)
+        for slot in ("anh_trai", "anh_phai", "can_canh"):
+            p = m_map.get(slot)
+            if p and p.exists() and p.suffix.lower() in IMAGE_EXTS:
+                if p not in unique_imgs:
+                    unique_imgs.append(p)
+
+    if not unique_imgs:
+        raise FileNotFoundError(f"Sản phẩm {prod_dir.name} chưa có file ảnh nào để làm video toàn màn hình.")
+
+    frames = get_product_frames(prod_dir)
+    var = get_variation_params(video_no, cfg)
+
+    if var.get("swap_slots", False) and len(unique_imgs) > 1:
+        unique_imgs = list(reversed(unique_imgs))
+
+    # 2. Tạo badge tiêu đề Hook ở trên
+    badge_png = w_dir / f"_hook_badge_v{video_no}.png"
+    make_top_hook_badge(hook_text=hook_text, out_badge_png=badge_png, cfg=cfg, video_no=video_no)
+
+    # 3. Phân chia các đoạn chuyển động (segments)
+    segments_info: List[Dict[str, Any]] = []
+    if len(unique_imgs) == 1:
+        dur_1 = round(total_dur / 2.0, 2)
+        dur_2 = round(total_dur - dur_1, 2)
+        segments_info = [
+            {"img": unique_imgs[0], "dur": dur_1, "motion": "zoom_in"},
+            {"img": unique_imgs[0], "dur": dur_2, "motion": "zoom_out"},
+        ]
+    elif len(unique_imgs) == 2:
+        dur_1 = round(total_dur / 2.0, 2)
+        dur_2 = round(total_dur - dur_1, 2)
+        segments_info = [
+            {"img": unique_imgs[0], "dur": dur_1, "motion": "zoom_in"},
+            {"img": unique_imgs[1], "dur": dur_2, "motion": "zoom_out"},
+        ]
+    else:
+        num_seg = len(unique_imgs)
+        seg_dur = round(total_dur / num_seg, 2)
+        for i, img_p in enumerate(unique_imgs):
+            d = seg_dur if i < num_seg - 1 else round(total_dur - seg_dur * (num_seg - 1), 2)
+            motion = "zoom_in" if (i % 2 == 0) else "zoom_out"
+            segments_info.append({"img": img_p, "dur": d, "motion": motion})
+
+    rendered_frames: List[Path] = []
+    for idx, seg in enumerate(segments_info):
+        img_p = seg["img"]
+        f_info = frames.get(img_p.stem, frames.get("anh_trai", {}))
+        cx = float(f_info.get("cx", 0.5))
+        cy = float(f_info.get("cy", 0.5))
+        z = float(f_info.get("z", 1.0))
+
+        src_im = load_image_for_media(img_p)
+        slot_rendered = render_slot_image(src_im, VIDEO_W, VIDEO_H, cx=cx, cy=cy, z=z)
+        frame_png = w_dir / f"_full_frame_{idx}_v{video_no}.png"
+        slot_rendered.save(frame_png, "PNG")
+        rendered_frames.append(frame_png)
+
+    # Lưu lại ảnh xem trước vào _video/banner_v{video_no}.png
+    preview_png = prod_dir / "_video" / f"banner_v{video_no}.png"
+    preview_png.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        base_prev = Image.open(rendered_frames[0]).convert("RGBA")
+        badge_rgba = Image.open(badge_png).convert("RGBA")
+        combined_prev = Image.alpha_composite(base_prev, badge_rgba)
+        combined_prev.convert("RGB").save(preview_png, "PNG")
+    except Exception:
+        pass
+
+    # 4. Xây dựng lệnh FFmpeg
+    inputs: List[str] = []
+    filter_parts: List[str] = []
+    input_counter = 0
+
+    def _add_input(args_list: List[str]) -> int:
+        nonlocal input_counter
+        inputs.extend(args_list)
+        idx = input_counter
+        input_counter += 1
+        return idx
+
+    seg_labels: List[str] = []
+    for idx, (seg, frame_path) in enumerate(zip(segments_info, rendered_frames)):
+        d = seg["dur"]
+        motion = seg["motion"]
+        in_idx = _add_input(["-loop", "1", "-t", f"{d:.2f}", "-r", str(FPS), "-i", str(frame_path.resolve())])
+        out_lbl = f"v_seg_{idx}"
+        seg_labels.append(out_lbl)
+
+        if motion == "zoom_in":
+            scale_expr = (
+                f"[{in_idx}:v]scale=w='trunc(1080*(1.0+0.09*t/{d:.2f})/2)*2':"
+                f"h='trunc(1920*(1.0+0.09*t/{d:.2f})/2)*2':eval=frame,"
+                f"crop=1080:1920,fps={FPS},format=rgba,setsar=1[{out_lbl}]"
+            )
+        else:
+            scale_expr = (
+                f"[{in_idx}:v]scale=w='trunc(1080*(1.09-0.08*t/{d:.2f})/2)*2':"
+                f"h='trunc(1920*(1.09-0.08*t/{d:.2f})/2)*2':eval=frame,"
+                f"crop=1080:1920,fps={FPS},format=rgba,setsar=1[{out_lbl}]"
+            )
+        filter_parts.append(scale_expr)
+
+    if len(seg_labels) > 1:
+        inputs_concat = "".join(f"[{lbl}]" for lbl in seg_labels)
+        filter_parts.append(f"{inputs_concat}concat=n={len(seg_labels)}:v=1:a=0,setsar=1[v_concat]")
+        base_v_lbl = "v_concat"
+    else:
+        base_v_lbl = seg_labels[0]
+
+    idx_badge = _add_input(["-loop", "1", "-t", f"{total_dur:.2f}", "-r", str(FPS), "-i", str(badge_png.resolve())])
+    filter_parts.append(f"[{base_v_lbl}][{idx_badge}:v]overlay=0:0:format=auto,setsar=1[v_badged]")
+
+    sharpen_val = max(0.0, min(2.0, float(cfg.get("sharpen", 0.5))))
+    post_filters: List[str] = [f"unsharp=5:5:{sharpen_val:.2f}:5:5:0.0"]
+    if var.get("eq_filter"):
+        post_filters.append(var["eq_filter"])
+
+    if subtitle_ass is not None and subtitle_ass.exists() and cfg.get("subtitle_enabled", True):
+        local_ass = w_dir / f"_sub_full_v{video_no}.ass"
+        if subtitle_ass.resolve() != local_ass.resolve():
+            local_ass.write_bytes(subtitle_ass.read_bytes())
+        post_filters.append(f"ass={local_ass.name}")
+
+    post_filters.append("format=yuv420p")
+    post_chain = ",".join(post_filters)
+    filter_parts.append(f"[v_badged]{post_chain}[v_out]")
+
+    music_str = str(cfg.get("music_path", "")).strip()
+    music_file = Path(music_str) if music_str else None
+    has_music = music_file is not None and music_file.exists() and music_file.is_file()
+    music_vol = max(0.0, min(1.0, float(cfg.get("music_volume", 0.12))))
+
+    if voice_enabled and voice_wav is not None:
+        idx_voice = _add_input(["-i", str(voice_wav.resolve())])
+        if has_music and music_file is not None:
+            idx_music = _add_input(["-stream_loop", "-1", "-i", str(music_file.resolve())])
+            filter_parts.append(
+                f"[{idx_voice}:a]apad=whole_dur={total_dur:.2f}[a_v];"
+                f"[{idx_music}:a]atrim=0:{total_dur:.2f},volume={music_vol:.2f}[a_m];"
+                f"[a_v][a_m]amix=inputs=2:duration=first:normalize=0,aresample=48000[a_out]"
+            )
+        else:
+            filter_parts.append(
+                f"[{idx_voice}:a]apad=whole_dur={total_dur:.2f},aresample=48000[a_out]"
+            )
+    elif has_music and music_file is not None:
+        idx_music = _add_input(["-stream_loop", "-1", "-i", str(music_file.resolve())])
+        filter_parts.append(
+            f"[{idx_music}:a]atrim=0:{total_dur:.2f},volume={music_vol:.2f},aresample=48000[a_out]"
+        )
+    else:
+        filter_parts.append(
+            f"aevalsrc=0:d={total_dur:.2f}:s=48000[a_out]"
+        )
+
+    full_filter = ";".join(filter_parts)
+
+    low_mem = bool(cfg.get("low_memory_mode", IS_LOW_MEMORY))
+    encoder = str(cfg.get("video_encoder", "libx264"))
+    crf_val = int(cfg.get("crf", 21 if low_mem else 20))
+
+    out_mp4.parent.mkdir(parents=True, exist_ok=True)
+    tmp_out = out_mp4.with_suffix(".tmp.mp4")
+    if tmp_out.exists():
+        try:
+            tmp_out.unlink()
+        except Exception:
+            pass
+
+    gc.collect()
+    ffmpeg_bin = find_binary("ffmpeg")
+    cmd: List[str] = [ffmpeg_bin, "-y"]
+    cmd.extend(inputs)
+    cmd.extend(["-filter_complex", full_filter, "-map", "[v_out]", "-map", "[a_out]"])
+
+    if low_mem:
+        cmd.extend([
+            "-threads", "1",
+            "-filter_threads", "1",
+            "-preset", "ultrafast",
+            "-tune", "fastdecode",
+            "-x264opts", "rc-lookahead=10:sync-lookahead=10:bframes=0:subme=1",
+        ])
+    else:
+        cmd.extend(["-preset", "veryfast"])
+
+    cmd.extend([
+        "-c:v", encoder,
+        "-crf", str(crf_val),
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-pix_fmt", "yuv420p",
+        "-t", f"{total_dur:.2f}",
+        "-map_metadata", "-1",
+        "-movflags", "+faststart",
+        str(tmp_out.resolve()),
+    ])
+
+    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+    res = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        cwd=str(w_dir),
+        creationflags=creationflags,
+    )
+    if res.returncode != 0:
+        err_msg = res.stderr[-800:] if res.stderr else "Unknown error"
+        raise RuntimeError(f"FFmpeg thất bại (mã {res.returncode}): {err_msg}")
+
+    if out_mp4.exists():
+        try:
+            out_mp4.unlink()
+        except Exception:
+            pass
+    os.replace(tmp_out, out_mp4)
+
+    return {
+        "out_mp4": out_mp4,
+        "mp4_path": out_mp4,
+        "total_duration": total_dur,
+        "duration": total_dur,
+        "banner_duration": 0.0,
+        "closeup_duration": total_dur,
+        "video_no": video_no,
+        "layout": "fullscreen_kenburns",
+        "variation": var,
+        "file_size": out_mp4.stat().st_size if out_mp4.exists() else 0,
+    }
+
+
 def compose_video(
     prod_dir: Path,
     video_no: int,
@@ -353,11 +699,33 @@ def compose_video(
 ) -> Dict[str, Any]:
     """Ráp video hoàn chỉnh 1080x1920 30fps bằng 1 lệnh FFmpeg filter_complex.
 
-    Khi chạy ở chế độ tiết kiệm RAM (Render Free 512MB):
-    - Thu gom rác bộ nhớ Pillow (gc.collect) trước khi gọi FFmpeg.
-    - Giới hạn luồng xử lý (-threads 1, -filter_threads 1) và dùng preset ultrafast + rc-lookahead=10
-      giúp đỉnh tiêu thụ RAM của cả Python + FFmpeg giữ ở mức ~190–250 MB (không bị OOM Killed).
+    Hỗ trợ 2 chế độ bố cục:
+    1. fullscreen_kenburns: Toàn màn hình 9:16 tạo chuyển động Ken Burns từ ảnh sản phẩm (không dùng video mẫu cũ).
+    2. banner_split: Dựng banner 2 ô chia đôi + ghép cận cảnh (chế độ kinh điển).
     """
+    layout = str(cfg.get("video_layout", "fullscreen_kenburns")).lower()
+    khung_path = prod_dir / "khung.json"
+    if khung_path.exists():
+        try:
+            kdata = json.loads(khung_path.read_text(encoding="utf-8-sig"))
+            if kdata.get("layout"):
+                layout = str(kdata["layout"]).lower()
+        except Exception:
+            pass
+
+    if layout == "fullscreen_kenburns":
+        return compose_fullscreen_kenburns(
+            prod_dir=prod_dir,
+            video_no=video_no,
+            hook_text=hook_text,
+            out_mp4=out_mp4,
+            cfg=cfg,
+            voice_wav=voice_wav,
+            voice_duration=voice_duration,
+            hook_duration=hook_duration,
+            subtitle_ass=subtitle_ass,
+            work_dir=work_dir,
+        )
     w_dir = work_dir or (TAM_DIR / f"render_{prod_dir.name}_v{video_no}")
     w_dir.mkdir(parents=True, exist_ok=True)
 

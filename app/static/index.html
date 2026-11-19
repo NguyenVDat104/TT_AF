@@ -136,7 +136,7 @@
           </div>
 
           <div class="tip-banner">
-            💡 <strong>Thao tác cực nhanh:</strong> Chỉ cần <strong>kéo-thả 3 file bất kỳ</strong> vào khung sản phẩm (không cần đổi tên thành <code>anh_trai</code>, <code>anh_phai</code>, <code>can_canh</code>) — máy tự nhận video dài nhất làm cận cảnh và có nút <strong>⇄ Đổi chỗ</strong> ngay bên dưới ảnh!
+            💡 <strong>Thao tác cực nhanh:</strong> Hỗ trợ cả 2 chế độ: 📱 <strong>Toàn màn hình Ken Burns</strong> (chỉ cần tải ảnh sản phẩm, máy tự động tạo chuyển động lia máy 9:16 mượt mà) hoặc 🎬 <strong>Banner chia 2 ô</strong> (kéo-thả so sánh 2 bên).
           </div>
 
           <div id="productsList" class="products-list">
@@ -157,7 +157,7 @@
           </div>
 
           <div class="tip-banner">
-            🎬 <strong>Quy trình Siêu Tốc:</strong> Tải lên <strong>1 video quay mẫu</strong> + <strong>1 file ghi âm giọng thật</strong> lưu thành Template. Mỗi khi có sản phẩm mới, bạn chỉ cần <strong>thay ảnh sản phẩm</strong> là hệ thống tự động ráp ra video trong <strong>10 giây</strong>, không cần viết lại kịch bản!
+            🎬 <strong>Quy trình Siêu Tốc:</strong> Lưu sẵn mẫu ghi âm &amp; bố cục. Khi có sản phẩm mới, bạn chỉ cần <strong>tải ảnh chiếc ốp mới</strong> là hệ thống tự động sinh video chuyển động 9:16 trong <strong>10 giây</strong>, 100% hình ảnh sản phẩm mới!
           </div>
 
           <div id="templatesList" class="templates-grid">
@@ -377,6 +377,16 @@
             <div class="card">
               <div class="card-header">
                 <h3>🎨 2. Khuôn Video, Chống Trùng Lặp &amp; Phụ Đề</h3>
+              </div>
+
+              <div class="settings-section-title">Bố Cục Video Xuất Ra</div>
+              <div class="form-group mb-12">
+                <label for="cfg_video_layout"><strong>Kiểu Bố Cục Video:</strong></label>
+                <select id="cfg_video_layout" class="form-select">
+                  <option value="fullscreen_kenburns">📱 Toàn màn hình 9:16 Ken Burns (Lia máy từ ảnh sản phẩm, không banner 2 ô)</option>
+                  <option value="banner_split">🎬 Banner chia 2 ô kinh điển (So sánh 2 ảnh/clip + Cận cảnh)</option>
+                </select>
+                <small class="form-hint">Chế độ Toàn màn hình sẽ tự động tạo video chuyển động lia máy từ ảnh sản phẩm, có badge tiêu đề ở trên và phụ đề động chạy suốt video.</small>
               </div>
 
               <div class="settings-section-title">Chống quét trùng lặp TikTok (Biến thiên v1, v2, v3)</div>

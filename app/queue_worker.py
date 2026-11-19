@@ -285,6 +285,12 @@ class VideoQueueManager:
                 if not dst.exists():
                     shutil.copy2(m_path, dst)
 
+        from app.content import list_candidate_media_files
+        for p in list_candidate_media_files(prod_dir):
+            dst = snap_dir / p.name
+            if not dst.exists():
+                shutil.copy2(p, dst)
+
         for cfg_name in ("khung.json", "noi_dung.txt"):
             src_cfg = prod_dir / cfg_name
             if src_cfg.exists():
@@ -315,10 +321,28 @@ class VideoQueueManager:
             if script is None:
                 raise ValueError(f"Không tìm thấy kịch bản [VIDEO {video_no}] trong noi_dung.txt.")
 
+            # Xác định kiểu bố cục video
+            layout = str(cfg.get("video_layout", "fullscreen_kenburns")).lower()
+            khung_path = prod_dir / "khung.json"
+            if khung_path.exists():
+                try:
+                    kdata = json.loads(khung_path.read_text(encoding="utf-8-sig"))
+                    if kdata.get("layout"):
+                        layout = str(kdata["layout"]).lower()
+                except Exception:
+                    pass
+
             media_map = resolve_product_media(prod_dir)
-            missing = [k for k in ("anh_trai", "anh_phai", "can_canh") if media_map.get(k) is None]
-            if missing:
-                raise FileNotFoundError(f"Thiếu tư liệu bắt buộc: {', '.join(missing)}")
+            from app.content import IMAGE_EXTS, list_candidate_media_files
+            all_imgs = [p for p in list_candidate_media_files(prod_dir) if p.suffix.lower() in IMAGE_EXTS]
+
+            if layout == "fullscreen_kenburns":
+                if not all_imgs and not media_map.get("anh_trai") and not media_map.get("anh_phai"):
+                    raise FileNotFoundError("Chưa tải lên ảnh sản phẩm (cần ít nhất 1 ảnh để làm video toàn màn hình).")
+            else:
+                missing = [k for k in ("anh_trai", "anh_phai", "can_canh") if media_map.get(k) is None]
+                if missing:
+                    raise FileNotFoundError(f"Thiếu tư liệu bắt buộc: {', '.join(missing)}")
 
             # Tạo bản chụp cô lập tư liệu
             snap_dir = self._create_job_snapshot(prod_dir, video_no)
@@ -353,7 +377,12 @@ class VideoQueueManager:
 
                 from app.render import compute_video_durations
 
-                t_tot, t_ban, _ = compute_video_durations(True, voice_dur, hook_dur, cfg)
+                if layout == "fullscreen_kenburns":
+                    t_tot = max(float(cfg.get("min_seconds", 18.0)), round(voice_dur + 0.6, 2))
+                    t_ban = 0.0
+                else:
+                    t_tot, t_ban, _ = compute_video_durations(True, voice_dur, hook_dur, cfg)
+
                 if cfg.get("subtitle_enabled", True):
                     doc_for_sub = script.doc if script and script.doc else (script.hook if script else "")
                     if doc_for_sub:
@@ -387,10 +416,14 @@ class VideoQueueManager:
                     f"cache {voice_res.cached_hits}/{voice_res.total_chunks} câu)."
                 )
 
-                # Tính thời lượng để sinh phụ đề động .ass khớp nửa sau
                 from app.render import compute_video_durations
 
-                t_tot, t_ban, _ = compute_video_durations(True, voice_dur, hook_dur, cfg)
+                if layout == "fullscreen_kenburns":
+                    t_tot = max(float(cfg.get("min_seconds", 18.0)), round(voice_dur + 0.6, 2))
+                    t_ban = 0.0
+                else:
+                    t_tot, t_ban, _ = compute_video_durations(True, voice_dur, hook_dur, cfg)
+
                 if cfg.get("subtitle_enabled", True) and voice_res.word_timings:
                     ass_file = snap_dir / f"_sub_v{video_no}.ass"
                     subtitle_ass = generate_closeup_ass_subtitle(
@@ -403,7 +436,7 @@ class VideoQueueManager:
             else:
                 self.log("  [1/3] Đang tắt giọng đọc -> dùng thời lượng mặc định.")
 
-            self.log("  [2/3] Dựng lớp Banner & chạy FFmpeg ghép video 1080x1920...")
+            self.log("  [2/3] Dựng video & chạy FFmpeg ghép 1080x1920...")
             out_mp4 = video_out_dir / f"v{video_no}.mp4"
             render_info = compose_video(
                 prod_dir=snap_dir,

@@ -94,6 +94,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "voice_speed": 1.0,
     "voice_gap_seconds": 0.15,
     # Khuôn video & Dải chữ
+    "video_layout": "fullscreen_kenburns",  # "fullscreen_kenburns" | "banner_split"
     "band_color": "#7A1016",
     "band_color_v2": "#5C0B10",
     "band_color_v3": "#1E2229",

@@ -63,6 +63,7 @@ def get_template_info(template_slug: str) -> Optional[Dict[str, Any]]:
     link = str(data.get("link", "")).strip()
     hashtag = str(data.get("hashtag", "")).strip() or "#xuhuong #fyp #tiktokshop"
     banner_duration = float(data.get("banner_duration", 6.5))
+    layout = str(data.get("layout", "fullscreen_kenburns")).strip()
 
     video_file: Optional[Path] = None
     for ext in (".mp4", ".mov", ".webm", ".mkv"):
@@ -102,6 +103,7 @@ def get_template_info(template_slug: str) -> Optional[Dict[str, Any]]:
         "audio_url": _rel_url(audio_file) if audio_file else None,
         "video_filename": video_file.name if video_file else None,
         "audio_filename": audio_file.name if audio_file else None,
+        "layout": layout,
         "created_at": data.get("created_at", ""),
     }
 
@@ -155,17 +157,19 @@ def apply_template_to_product(
 
     t_dir = TEMPLATES_DIR / t_info["slug"]
 
-    # 1. Kế thừa video mẫu -> làm can_canh.mp4 của sản phẩm
-    tpl_video: Optional[Path] = None
-    for ext in (".mp4", ".mov", ".webm", ".mkv"):
-        cand = t_dir / f"video_mau{ext}"
-        if cand.exists():
-            tpl_video = cand
-            break
+    # 1. Kế thừa video mẫu -> làm can_canh.mp4 của sản phẩm (chỉ khi template yêu cầu banner_split)
+    tpl_layout = str(t_info.get("layout", "fullscreen_kenburns")).lower()
+    if tpl_layout == "banner_split":
+        tpl_video: Optional[Path] = None
+        for ext in (".mp4", ".mov", ".webm", ".mkv"):
+            cand = t_dir / f"video_mau{ext}"
+            if cand.exists():
+                tpl_video = cand
+                break
 
-    if tpl_video and tpl_video.exists():
-        dst_vid = p_dir / "can_canh.mp4"
-        shutil.copy2(tpl_video, dst_vid)
+        if tpl_video and tpl_video.exists():
+            dst_vid = p_dir / "can_canh.mp4"
+            shutil.copy2(tpl_video, dst_vid)
 
     # 2. Kế thừa file ghi âm mẫu -> làm v1.wav của sản phẩm
     tpl_audio: Optional[Path] = None
@@ -228,6 +232,7 @@ def apply_template_to_product(
         except Exception:
             khung_data = {}
     khung_data["template_slug"] = t_info["slug"]
+    khung_data["layout"] = tpl_layout
     khung_data["banner_duration"] = t_info.get("banner_duration", 6.5)
     khung_path.write_text(json.dumps(khung_data, ensure_ascii=False, indent=2), encoding="utf-8")
 

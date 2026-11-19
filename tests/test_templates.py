@@ -49,6 +49,7 @@ def test_template_flow(tmp_path: Path, monkeypatch):
             "name": "Mẫu ốp chống bẩn test",
             "hook": "ĐÂY RỒI MẪU ỐP LƯNG CHỐNG BẨN",
             "banner_duration": 6.5,
+            "layout": "banner_split",
             "link": "https://vt.tiktok.com/test",
             "hashtag": "#oplung #xuhuong",
         },
@@ -94,7 +95,30 @@ def test_template_flow(tmp_path: Path, monkeypatch):
         content_txt = (new_p_dir / "noi_dung.txt").read_text(encoding="utf-8-sig")
         assert "ĐÂY RỒI MẪU ỐP LƯNG CHỐNG BẨN" in content_txt
 
-        # 3. Kiểm tra API xóa template
+        # 3. Test template chế độ fullscreen_kenburns (không copy video cũ, chỉ dùng ảnh mới)
+        t_slug_kb = "mau_kenburns_02"
+        cur_kb_dir = tpl_dir / t_slug_kb
+        cur_kb_dir.mkdir(parents=True, exist_ok=True)
+        (cur_kb_dir / "ghi_am_mau.wav").write_bytes(b"RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x80>\x00\x00\x00}\x00\x00\x02\x00\x10\x00data\x00\x00\x00\x00")
+        templates_mgr.save_template_metadata(
+            t_slug_kb,
+            {
+                "name": "Mẫu Kenburns Toàn màn hình",
+                "hook": "ỐP LƯNG SIÊU ĐẸP",
+                "layout": "fullscreen_kenburns",
+            },
+        )
+        r_kb = client.post(
+            "/api/template/apply_and_render",
+            data={"template_slug": t_slug_kb, "product_name": "op_kb_moi"},
+            files=[("files", ("hinh_op.jpg", img_bytes, "image/jpeg"))],
+        )
+        assert r_kb.status_code == 200
+        kb_p_dir = sp_dir / "op_kb_moi"
+        assert (kb_p_dir / "anh_trai.jpg").exists()
+        assert not (kb_p_dir / "can_canh.mp4").exists()  # Không copy video cũ
+
+        # 4. Kiểm tra API xóa template
         r_del = client.delete(f"/api/template/{t_slug}")
         assert r_del.status_code == 200
         assert not (tpl_dir / t_slug).exists()
